@@ -19,8 +19,8 @@ const Login2FA = () => {
                 email: state.email,
                 otp,
             });
-
             setToken(res.data.token);
+            localStorage.setItem('token', res.data.token)
             toast.success('Login successful!');
             navigate('/dashboard');
         } catch (err) {
