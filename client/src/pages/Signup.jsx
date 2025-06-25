@@ -20,7 +20,7 @@ const Signup = () => {
         setError('');
         try {
             const res = await api.post('/auth/signup', { firstName, lastName, email, password });
-
+            localStorage.setItem('token', res.data.token)
             setToken(res.data.token);
             toast.success('Account created successfully!');
             navigate('/dashboard');

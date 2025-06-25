@@ -21,8 +21,8 @@ const Login = () => {
             const res = await api.post('/auth/login', { email, password, ip });
 
             // Update token in context (and internally it stays in localStorage via your existing context logic)
-            setToken(res.data.token);
             localStorage.setItem('token', res.data.token)
+            setToken(res.data.token);
             toast.success('Login successful!');
             navigate('/dashboard');
 

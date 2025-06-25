@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Otp from '../models/Otp.js';
 import sendOtp from '../utils/sendOtp.js';
+import { isValidEmail } from '../utils/validEmail.js';
 
 export const register = async (req, res) => {
     try {
