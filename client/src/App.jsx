@@ -9,11 +9,9 @@ import AddTransaction from './pages/AddTransaction';
 import TransactionHistory from './pages/TransactionHistory';
 import AddMoney from './pages/AddMoney';
 import UpdateProfile from './pages/UpdateProfile';
-import Transaction2FA from './pages/transaction2FA';
-import Login2FA from './pages/login2FA';
+import Login2FA from './pages/Login2FA';
 import { AuthProvider } from './context/AuthContext';
-import TransactionFilter from './components/TransactionFilter';
-import TestTransactionFilter from './pages/TestTransactionFilter';
+import Transaction2FA from './pages/Transaction2FA';
 
 const App = () => {
     return (
