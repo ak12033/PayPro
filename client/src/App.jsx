@@ -53,7 +53,6 @@ const App = () => {
                     <Route path="/add-money" element={<AddMoney />} />
                     <Route path="/update-profile" element={<UpdateProfile />} />
                     <Route path="/verify-login-otp" element={<Login2FA />} />
-                    <Route path="/check" element={<TestTransactionFilter />} />
                 </Routes>
             </AuthProvider>
         </BrowserRouter>
