@@ -12,6 +12,7 @@ import UpdateProfile from './pages/UpdateProfile';
 import Login2FA from './pages/Login2FA';
 import { AuthProvider } from './context/AuthContext';
 import Transaction2FA from './pages/Transaction2FA';
+import SplashScreen from './pages/SplashScreen';
 
 const App = () => {
     return (
@@ -42,7 +43,7 @@ const App = () => {
                 />
 
                 <Routes>
-                    <Route path="/" element={<Login />} />
+                    <Route path="/" element={<SplashScreen />} />
                     <Route path="/signup" element={<Signup />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/verify-otp" element={<Transaction2FA />} />
