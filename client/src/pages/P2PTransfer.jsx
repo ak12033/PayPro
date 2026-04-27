@@ -169,7 +169,7 @@ const P2PTransfer = () => {
                     </div>
                   </div>
 
-                  <div className="relative">
+                  <div className="relative z-[120]">
                     <label className="mb-2 block text-sm font-medium text-slate-200">
                       Recipient
                     </label>
@@ -215,7 +215,7 @@ const P2PTransfer = () => {
                     </button>
 
                     {dropdownOpen && (
-                      <div className="absolute z-30 mt-3 w-full rounded-2xl border border-white/10 bg-[#0c1726]/95 p-3 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
+                      <div className="absolute z-[150] mt-3 w-full rounded-2xl border border-white/10 bg-[#0c1726]/95 p-3 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
                         <div className="mb-3 flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3">
                           <FiSearch className="text-slate-500" />
                           <input
@@ -388,7 +388,7 @@ const P2PTransfer = () => {
             type="button"
             aria-label="Close recipient selector"
             onClick={() => setDropdownOpen(false)}
-            className="fixed inset-0 z-20 cursor-default bg-transparent"
+            className="fixed inset-0 z-[90] cursor-default bg-transparent"
           />
         )}
       </div>

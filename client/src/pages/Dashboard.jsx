@@ -7,7 +7,6 @@ import { useAuth } from '../context/AuthContext';
 import { useEffect } from 'react';
 
 const Dashboard = () => {
-
     const { balance, allTransactions, recentTransactions, fetchDashboardData } = useAuth();
 
     useEffect(() => {
@@ -32,11 +31,11 @@ const Dashboard = () => {
         .reduce((acc, t) => acc + t.amount, 0);
 
     return (
-        <div className="flex bg-gradient-to-br from-sky-950 via-sky-900 to-sky-950 min-h-screen">
-            <div className="fixed top-0 left-0 h-screen w-64">
+        <div className="flex min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.10),_transparent_24%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.10),_transparent_28%),linear-gradient(135deg,#06101d_0%,#0b1728_45%,#091423_100%)] text-white">
+            <div className="fixed top-0 left-0 h-screen w-64 border-r border-white/10 bg-white/[0.03] backdrop-blur-2xl">
                 <Sidebar />
             </div>
-            <div className="p-8 flex-1 ml-64">
+            <div className="ml-64 flex-1 p-4 sm:p-6 lg:p-8 xl:p-10">
                 <Topbar />
                 <StatsCards
                     balance={balance}
