@@ -11,6 +11,13 @@ const userSchema = new mongoose.Schema({
         isp: String,
     },
     accountBalance: { type: Number, default: 0 },
+    fcmTokens: { type: [String], default: [] },
+    preferences: {
+        twoFactorAuth: { type: Boolean, default: false },
+        transaction2FA: { type: Boolean, default: true },
+        emailAlerts: { type: Boolean, default: true },
+        pushNotifications: { type: Boolean, default: true }
+    }
 });
 
 export default mongoose.model('User', userSchema);

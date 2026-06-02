@@ -1,16 +1,17 @@
 import nodemailer from 'nodemailer';
+import config from '../config/env.js';
 
 const sendOtp = async (email, otp) => {
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
+            user: config.EMAIL_USER,
+            pass: config.EMAIL_PASS,
         },
     });
 
     await transporter.sendMail({
-        from: `"PayPro Security" <${process.env.EMAIL_USER}>`,
+        from: `"PayPro Security" <${config.EMAIL_USER}>`,
         to: email,
         subject: '🔐 Verify Your Login - OTP Code',
         text: `Hello,

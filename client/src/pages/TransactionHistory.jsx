@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import Sidebar from '../components/Sidebar';
 import api from '../api/api.js';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -78,15 +77,8 @@ const TransactionHistory = () => {
     });
 
   return (
-    <div className="flex min-h-screen bg-[#07111f] text-white">
-      <Sidebar />
-
-      <div className="relative flex-1 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.10),_transparent_26%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.08),_transparent_28%),linear-gradient(180deg,#08111e_0%,#0b1626_100%)]" />
-        <div className="absolute inset-0 opacity-[0.06] [background-image:linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:72px_72px]" />
-
-        <div className="relative z-10 h-screen overflow-y-auto px-5 py-6 sm:px-8 lg:px-10">
-          <div className="mx-auto max-w-7xl">
+    <>
+      <div className="mx-auto max-w-7xl">
             <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <p className="mb-2 text-xs font-medium uppercase tracking-[0.24em] text-cyan-300/75">
@@ -343,10 +335,8 @@ const TransactionHistory = () => {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
       </div>
-    </div>
+    </>
   );
 };
 

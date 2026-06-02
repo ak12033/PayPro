@@ -1,181 +1,161 @@
-# 💸 PayPro — AI-Powered MERN Payment System
+# 💸 PayPro — AI-Powered MERN & FastAPI Payment System
 
-PayPro is a secure, AI-enhanced **Peer-to-Peer (P2P) Payment Application** built with the **MERN stack**, offering AI-powered transaction categorization, location-based 2FA security, P2P money transfers, Stripe integration for adding money, and insightful transaction summaries — all wrapped within a clean, modern UI.
+PayPro is a highly secure, AI-enhanced **Peer-to-Peer (P2P) Payment and Wallet Application**. Built on a modern full-stack architecture, it integrates a React client, a Node.js/Express core server, and a FastAPI Python AI microservice.
 
----
-
-## 🛠️ Tech Stack
-
-- **Frontend:** React (Vite), Tailwind CSS, React Hot Toast, Lucide Icons
-- **Backend:** Node.js, Express.js
-- **Database:** MongoDB (Cloud)
-- **Authentication:** JWT, bcrypt
-- **AI Integration:** Google Gemini API (Generative AI)
-- **Email Service:** Nodemailer (Gmail SMTP)
-- **Payment Gateway:** Stripe
-- **Location Detection:** Public IP & Location API
-- **Hosting:** Vercel (Frontend) & Render (Backend)
+PayPro features location-aware security checks (triggering 2FA email OTPs upon login location changes), rate-limiting P2P transaction controls, direct wallet top-ups and refunds via Razorpay, real-time push alerts via Firebase Cloud Messaging, and automatic AI-powered transaction categorization, fraud evaluation, and dynamic insights using Google Gemini.
 
 ---
 
-## ✨ Features
+## 🛠️ Technology Stack
 
-- **User Authentication**
-  - Secure Signup & Login using JWT
-  - **Location-based AI 2FA** using OTP if login from new location (city/IP)
+### Frontend (`/client`)
+*   **Core Framework:** React 19 (Vite-powered)
+*   **Styling:** Tailwind CSS (v4) for fully responsive, fluid, and dark-themed components
+*   **Data Visualization:** Recharts for wallet activity and ledger graphing
+*   **Notifications & Alerts:** React Hot Toast for modern toast alerts
+*   **Client Services:** Axios with interceptor-based token refresh queueing; Firebase Client SDK for web push tokens
 
-- **Location Tracking**
-  - Capture and store user's last login location (city + IP)
-  - Compare current login location on every login attempt
-  - If location differs → trigger OTP-based 2FA  
-  - Updates last login location after successful verification  
+### Main Core Backend (`/server`)
+*   **Runtime:** Node.js (ES Modules syntax)
+*   **Framework:** Express.js (v5) with cookie parsing and request logging
+*   **Database ORM:** Mongoose & MongoDB Atlas
+*   **Authentication:** Dual JWT custom sessions with bcryptjs encryption
+*   **Automated Scheduling:** `node-cron` for daily balance warnings
+*   **Mailing:** Nodemailer (Gmail SMTP setup) for OTP challenges
+*   **Gateway Integrations:** Razorpay Node SDK (order creation, signature checks, webhooks, refunds)
+*   **Notification Engine:** Firebase Admin SDK (multicast background push)
 
-- **P2P Money Transfer**
-  - Transfer money between registered users
-  - If 5+ transfers to the same user in a day — triggers 2FA OTP  
-  - Maintains dual transaction records for sender and recipient  
-
-- **Stripe Payments**
-  - Add money to your account via Stripe payment gateway
-
-- **AI-Powered Categorization**
-  - Categorize each transaction using **Gemini AI**
-  - Assign AI-suggested icons based on transaction description
-
-- **Transaction Management**
-  - Paginated transaction history
-  - Transaction filtering: All, Payment, Transfer, Received
-  - Full transaction summary: sent, received, added via Stripe
-
-- **User Profile**
-  - View & Update profile details (with email validation & unique email enforcement)
-
-- **Responsive Modern UI**
-  - Clean, intuitive, mobile-friendly interface built with Tailwind CSS
+### AI Microservice (`/fastapi-server`)
+*   **Language & Framework:** Python 3.10+ & FastAPI (Uvicorn)
+*   **AI Engine SDK:** `google-genai` integration utilizing **`gemini-2.5-flash`**
+*   **Schemas & Validation:** Pydantic models for strict structure validation
 
 ---
 
-## 📄 Application Pages Overview
+## ✨ System Features
 
-### 🔐 Authentication
+### 🔐 1. Geolocation-Based AI 2FA Verification
+*   **IP-to-Location Resolution:** Translates user IP addresses during signup and login using `ipapi.co`.
+*   **Dynamic Security Check:** Compares current login city with the last saved session location.
+*   **Nodemailer OTP Challenge:** If login takes place from a different city, or if the user enabled explicit 2FA in profile settings, the login halts, generating and sending a 6-digit verification code to the registered email address.
+*   **Notification:** Dispatches high-security alerts warning users of unrecognized connection attempts.
 
-- **Sign Up**
-  - Full Name, Email, Password  
-  - Email format validation  
-  - Duplicate email prevention  
+### 💸 2. Secure P2P Money Transfers
+*   **Ledger Consistency:** Creates a dual transaction ledger (Debit entry for sender, Credit entry for recipient) in MongoDB, updating balances in a unified operation.
+*   **Rate-Limiting Protection:** Evaluates frequency of daily transfers. If 5 or more transactions are sent to the same user in a single day, the platform triggers a mandatory 6-digit email OTP verify block to prevent unauthorized account draining.
+*   **Instant Notifications:** Dispatches push notifications to both parties immediately upon completion.
 
-- **Login**
-  - JWT Authentication  
-  - **Location detection via public IP lookup**
-  - AI-based location comparison
-  - 2FA OTP via email if login from new location
+### 💳 3. Razorpay Wallet Top-up & Refunds
+*   **Secure Checkout:** Integrates Razorpay scripts directly in the React frontend, allowing secure credit card and UPI top-ups.
+*   **Signature Authentication:** Validates payments using SHA256 HMAC signature verification in the backend.
+*   **Webhook Receivers:** Robust webhook capture endpoints updating ledger records on successful, failed, or refunded payments.
+*   **Refund Integration:** Supports single-click refunds that deduct user wallet balances securely and communicate back to Razorpay APIs.
 
----
+### 🧠 4. AI-Powered Enhancements (FastAPI & Gemini)
+*   **AI Transaction Categorization:** Sends transaction details to the FastAPI service. Gemini analyzes descriptions and maps them into 19 financial categories, returning an appropriate Lucide vector icon.
+*   **AI Fraud Check Engine:** Gathers the transaction details along with the user's last 10 historical transactions. Gemini computes a dynamic `risk_score` (0-100), tags the `risk_level` (`low`, `medium`, `high`), and provides a natural reason description.
+*   **AI Financial Assistant:** Slide-out chatbot (`AIAssistantPanel.jsx`) built directly into the client. Feeds user transaction logs to Gemini to provide personalized answers (e.g. *"What was my biggest expense this month?"*).
+*   **AI Financial Insights:** Generates structured spending reports, budget suggestions, and anomalous trend cards.
 
-### 💸 Dashboard & Payments
-
-- **Transaction Summary**
-  - Total Sent, Received, Added via Stripe
-
-- **Add Money**
-  - Seamless Stripe integration
-  - Instant account balance update & transaction logging
-
-- **Send Money**
-  - P2P transfers to other registered users
-  - If 5+ transfers to same user in a day → triggers 2FA OTP  
-  - Secure balance management & dual transaction record creation  
-
-- **Transaction History**
-  - Paginated history with filters  
-  - AI-generated categories & icons
-
-- **Profile**
-  - View & update personal info  
-  - Email format check & uniqueness validation
+### 🔔 5. FCM Multicast Push Notifications
+*   **Push Registration:** Registers and associates client device FCM tokens to user accounts.
+*   **Real-time Dispatches:** Transmits payments, transfers, reminders, and alerts directly to mobile/browser clients.
+*   **Automatic Dead Token Pruning:** Cleans up expired, stale, or revoked push tokens returned by Firebase.
 
 ---
 
-## 📊 AI-Powered Enhancements
+## 🔒 Security & Session Architecture
 
-- **Transaction Categorization (Gemini AI)**
-  - Categorizes transaction description into one of 18+ financial categories
-
-- **Icon Suggestion (Gemini AI)**
-  - Suggests appropriate Lucide icons for each transaction
-
----
-
-## 📍 Location-Based Security
-
-- Detects and stores user's **last login city and IP address**
-- On each login attempt:
-  - Compares current location with last saved one
-  - If mismatch → triggers OTP-based 2FA
-  - Verifies OTP before proceeding with login
-- Updates last login location post successful 2FA
+*   **Refresh Token Rotation (RTR):** Protects against token theft. Issues unique refresh tokens on every rotation.
+*   **Reuse Detection:** Tracks the cryptographic family trees of tokens (`familyId`). If an old refresh token is reused, all sessions in that family tree are immediately terminated and invalidated.
+*   **In-Memory Access Tokens:** Minimizes XSS risk by avoiding local storage of JWT tokens.
+*   **TTL Auto-Expiry:** Employs native MongoDB TTL indexes to clean up expired sessions automatically.
 
 ---
 
-## 🚀 Deployment —  Vercel
+## 🚀 Environment Setup
 
-- **Backend:** Vercel  
-- **Frontend:** Vercel  
+### 1. Main Core Backend Server (`/server/.env`)
+Create a `.env` file under the `server` directory:
+```env
+PORT=5000
+NODE_ENV=development
+MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net
+JWT_SECRET=your_jwt_secret
+EMAIL_USER=your_gmail_address
+EMAIL_PASS=your_gmail_app_password
+IPAPI_URL=https://ipapi.co
+CORS_ORIGIN=http://localhost:5173
+FASTAPI_URL=http://localhost:8000
+GEMINI_API_KEY=your_gemini_api_key
+RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
+FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"...","private_key":"..."}
+```
+
+### 2. React Client (`/client/.env`)
+Create a `.env` file under the `client` directory:
+```env
+VITE_BACKEND_URL=http://localhost:5000
+VITE_RAZORPAY_KEY_ID=your_razorpay_key_id
+
+# Firebase Client Configuration
+VITE_FIREBASE_API_KEY=your_firebase_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your_firebase_project_domain
+VITE_FIREBASE_PROJECT_ID=your_firebase_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+VITE_FIREBASE_APP_ID=your_firebase_app_id
+VITE_FIREBASE_VAPID_KEY=your_firebase_vapid_key
+```
+
+### 3. FastAPI Server (`/fastapi-server/.env`)
+Create a `.env` file under the `fastapi-server` directory:
+```env
+GEMINI_API_KEY=your_gemini_api_key
+```
 
 ---
 
-## 🚀 Live Demo
+## 🏁 Getting Started
 
-🌐 Click this: [https://PayPro.vercel.app](https://pay-pro-lcrj.vercel.app/)
+### Step 1: Install Dependencies
+Install packages in all three service directories:
+```bash
+# Frontend
+cd client
+npm install
 
----
+# Express Backend
+cd ../server
+npm install
 
-## Getting Started
+# FastAPI AI Microservice (Python virtual environment recommended)
+cd ../fastapi-server
+python -m venv venv
+venv\Scripts\activate   # On Windows (use source venv/bin/activate on Mac/Linux)
+pip install -r requirements.txt
+```
+*(Ensure a `requirements.txt` containing `fastapi`, `uvicorn`, `google-genai`, `pydantic`, `python-dotenv` is present)*
 
-To get started with the Task-Pilot project, follow these steps:
+### Step 2: Running the Services
 
-1. Clone the repository from GitHub:
+1.  **FastAPI AI Server:** Start the Python service:
+    ```bash
+    cd fastapi-server
+    # activate venv if not already
+    uvicorn app.main:app --port 8000 --reload
+    ```
+2.  **Express Backend Server:** Start the core Node service:
+    ```bash
+    cd server
+    npm run server
+    ```
+3.  **Vite Client:** Launch the React client:
+    ```bash
+    cd client
+    npm run dev
+    ```
 
-2. **Set Environment Variables**: Navigate to the `frontend` and `backend` folders and add necessary environment variables. You may need to create a `.env` file and configure it with required variables:
-   In the backend/.env file:
-
-   ```
-   PORT=5000
-   MONGO_URI=your_mongodb_connection_string_here
-   JWT_SECRET=your_jwt_secret_here
-   EMAIL_USER=your_email_here
-   EMAIL_PASS=your_email_app_password_here
-   IPAPI_URL=https://ipapi.co
-   GEMINI_API_KEY_1=your_gemini_api_key_here
-   GEMINI_API_KEY=your_second_gemini_api_key_here
-   STRIPE_SECRET_KEY=your_stripe_secret_key_here
-   ```
-
-   In the frontend/.env file:
-
-   ```
-   VITE_BACKEND_URL=http://localhost:5000
-   VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_actual_key
-   ```
-
-3. **Install Dependencies**: Install dependencies in the `frontend` and `backend` folders using npm or yarn:
-
-   ```
-   cd frontend
-   npm install
-   cd ../backend
-   npm install
-   ```
-
-4. **Start the Backend Server**: In the `backend` folder, start the development server using npm:
-
-   ```
-   npm run server
-   ```
-
-5. **Start the Frontend**: In the `frontend` folder, start the frontend application:
-
-   ```
-   npm run dev
-   ```
-
+Open your browser to `http://localhost:5173` to explore the PayPro Platform.

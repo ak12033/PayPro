@@ -72,8 +72,7 @@ const Signup = () => {
         password,
       });
 
-      localStorage.setItem('token', res.data.token);
-      setToken(res.data.token);
+      setToken(res.data.accessToken);
       toast.success('Account created successfully!');
       navigate('/dashboard');
     } catch (err) {

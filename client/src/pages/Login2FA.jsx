@@ -33,8 +33,7 @@ const Login2FA = () => {
         otp,
       });
 
-      setToken(res.data.token);
-      localStorage.setItem('token', res.data.token);
+      setToken(res.data.accessToken);
       toast.success('Login successful!');
       navigate('/dashboard');
     } catch (err) {

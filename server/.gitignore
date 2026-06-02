@@ -1,2 +1,4 @@
 .env
 node_modules
+# Firebase Admin SDK
+server/config/*.json

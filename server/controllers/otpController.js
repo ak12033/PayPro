@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import sendOtp from '../utils/sendOtp.js';
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
+import { createSession } from '../utils/token.js';
 
 export const verifyLoginOtp = async (req, res) => {
     try {
@@ -23,13 +24,12 @@ export const verifyLoginOtp = async (req, res) => {
         await Otp.deleteOne({ email });
 
         const user = await User.findOne({ email });
-        const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, {
-            expiresIn: '2d',
-        });
+        const accessToken = await createSession(user, req, res);
+        
         user.lastLoginLocation = req.currentLocation;
         await user.save();
 
-        res.status(200).json({ message: 'Login successful', token });
+        res.status(200).json({ message: 'Login successful', accessToken });
     } catch (error) {
         console.error('Login OTP Verification Error:', error);
         res.status(500).json({ message: 'Failed to verify login OTP' });

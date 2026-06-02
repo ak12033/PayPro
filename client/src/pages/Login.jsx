@@ -45,8 +45,7 @@ const Login = () => {
         ip
       });
 
-      localStorage.setItem("token",res.data.token);
-      setToken(res.data.token);
+      setToken(res.data.accessToken);
 
       toast.success("Welcome back");
       navigate("/dashboard");

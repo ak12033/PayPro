@@ -6,20 +6,29 @@ import {
   FiUser,
   FiPlus,
   FiChevronDown,
+  FiBell,
+  FiCheck
 } from 'react-icons/fi';
 import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 
 const Topbar = () => {
   const { userName, logout } = useAuth();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const menuRef = useRef(null);
+  const notifRef = useRef(null);
 
   useEffect(() => {
     const handleOutsideClick = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
         setMenuOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setNotifOpen(false);
       }
     };
 
@@ -61,6 +70,78 @@ const Topbar = () => {
             <FiPlus size={16} />
             Add money
           </button>
+
+          {/* Notifications Dropdown */}
+          <div className="relative" ref={notifRef}>
+            <button
+              onClick={() => setNotifOpen(!notifOpen)}
+              className="relative flex h-[46px] w-[46px] items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-slate-200 transition-all duration-200 hover:bg-white/[0.07]"
+            >
+              <FiBell size={20} />
+              {unreadCount > 0 && (
+                <span className="absolute right-2 top-2 flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+                </span>
+              )}
+            </button>
+
+            <div
+              className={`absolute right-0 top-[calc(100%+12px)] w-80 sm:w-96 origin-top-right rounded-2xl border border-white/10 bg-[#0d1726]/95 p-4 shadow-[0_24px_70px_rgba(0,0,0,0.45)] backdrop-blur-2xl transition-all duration-200 ${
+                notifOpen
+                  ? 'visible translate-y-0 opacity-100'
+                  : 'invisible -translate-y-2 opacity-0'
+              }`}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">Notifications</h3>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="text-xs font-medium text-cyan-400 hover:text-cyan-300"
+                  >
+                    Mark all as read
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1">
+                {notifications.length === 0 ? (
+                  <p className="text-center text-sm text-slate-500 py-4">No notifications yet.</p>
+                ) : (
+                  notifications.map((notif) => (
+                    <div
+                      key={notif._id}
+                      className={`relative flex flex-col gap-1 rounded-xl border p-3 transition-colors ${
+                        notif.isRead
+                          ? 'border-white/5 bg-transparent opacity-75'
+                          : 'border-cyan-500/20 bg-cyan-500/5'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <p className={`text-sm font-medium ${notif.isRead ? 'text-slate-300' : 'text-white'}`}>
+                          {notif.title}
+                        </p>
+                        {!notif.isRead && (
+                          <button
+                            onClick={() => markAsRead(notif._id)}
+                            className="ml-2 rounded-md bg-white/5 p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+                            title="Mark as read"
+                          >
+                            <FiCheck size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs leading-relaxed text-slate-400">{notif.message}</p>
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        {new Date(notif.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
 
           <div className="relative" ref={menuRef}>
             <button

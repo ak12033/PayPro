@@ -4,18 +4,19 @@ import { useAuth } from '../context/AuthContext';
 
 const SplashScreen = () => {
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, isCheckingAuth } = useAuth();
   const [stage, setStage] = useState('booting');
 
   useEffect(() => {
-    const savedToken = token || localStorage.getItem('token');
+    // If we're still checking auth silently in the background, don't redirect yet
+    if (isCheckingAuth) return;
 
     const stageOne = setTimeout(() => {
-      setStage(savedToken ? 'personalizing' : 'welcome');
+      setStage(token ? 'personalizing' : 'welcome');
     }, 700);
 
     const redirect = setTimeout(() => {
-      if (savedToken) {
+      if (token) {
         navigate('/dashboard', { replace: true });
       } else {
         navigate('/login', { replace: true });
@@ -26,7 +27,7 @@ const SplashScreen = () => {
       clearTimeout(stageOne);
       clearTimeout(redirect);
     };
-  }, [token, navigate]);
+  }, [token, isCheckingAuth, navigate]);
 
   const content = {
     booting: {

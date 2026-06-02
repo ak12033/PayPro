@@ -11,50 +11,63 @@ import AddMoney from './pages/AddMoney';
 import UpdateProfile from './pages/UpdateProfile';
 import Login2FA from './pages/Login2FA';
 import { AuthProvider } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
+import { SocketProvider } from './context/SocketContext';
 import Transaction2FA from './pages/Transaction2FA';
 import SplashScreen from './pages/SplashScreen';
+import PaymentHistory from './pages/PaymentHistory';
+import Layout from './components/Layout';
 
 const App = () => {
     return (
         <BrowserRouter>
             <AuthProvider>
-                {/* Toast notifications */}
-                <Toaster
-                    position="top-right"
-                    toastOptions={{
-                        style: {
-                            borderRadius: '12px',
-                            background: 'linear-gradient(to right, #0f172a, #1e293b)',
-                            color: '#f9fafb',
-                        },
-                        success: {
-                            iconTheme: {
-                                primary: '#34D399',
-                                secondary: '#1e293b',
+                <NotificationProvider>
+                    <SocketProvider>
+                        {/* Toast notifications */}
+                        <Toaster
+                        position="top-right"
+                        toastOptions={{
+                            style: {
+                                borderRadius: '12px',
+                                background: 'linear-gradient(to right, #0f172a, #1e293b)',
+                                color: '#f9fafb',
                             },
-                        },
-                        error: {
-                            iconTheme: {
-                                primary: '#F87171',
-                                secondary: '#1e293b',
+                            success: {
+                                iconTheme: {
+                                    primary: '#34D399',
+                                    secondary: '#1e293b',
+                                },
                             },
-                        },
-                    }}
-                />
+                            error: {
+                                iconTheme: {
+                                    primary: '#F87171',
+                                    secondary: '#1e293b',
+                                },
+                            },
+                        }}
+                    />
 
-                <Routes>
-                    <Route path="/" element={<SplashScreen />} />
-                    <Route path="/signup" element={<Signup />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/verify-otp" element={<Transaction2FA />} />
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/p2p-transfer" element={<P2PTransfer />} />
-                    <Route path="/add-transaction" element={<AddTransaction />} />
-                    <Route path="/transactions" element={<TransactionHistory />} />
-                    <Route path="/add-money" element={<AddMoney />} />
-                    <Route path="/update-profile" element={<UpdateProfile />} />
-                    <Route path="/verify-login-otp" element={<Login2FA />} />
-                </Routes>
+                    <Routes>
+                        <Route path="/" element={<SplashScreen />} />
+                        <Route path="/signup" element={<Signup />} />
+                        <Route path="/login" element={<Login />} />
+                        <Route path="/verify-otp" element={<Transaction2FA />} />
+                        <Route path="/verify-login-otp" element={<Login2FA />} />
+                        
+                        {/* Authenticated Routes with Persistent Layout */}
+                        <Route element={<Layout />}>
+                            <Route path="/dashboard" element={<Dashboard />} />
+                            <Route path="/p2p-transfer" element={<P2PTransfer />} />
+                            <Route path="/add-transaction" element={<AddTransaction />} />
+                            <Route path="/transactions" element={<TransactionHistory />} />
+                            <Route path="/payment-history" element={<PaymentHistory />} />
+                            <Route path="/add-money" element={<AddMoney />} />
+                            <Route path="/update-profile" element={<UpdateProfile />} />
+                        </Route>
+                    </Routes>
+                    </SocketProvider>
+                </NotificationProvider>
             </AuthProvider>
         </BrowserRouter>
     );

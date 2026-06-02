@@ -1,19 +1,34 @@
-import React, { useMemo, useState } from 'react';
-import Sidebar from '../components/Sidebar';
-import CheckoutForm from '../components/stripe/CheckoutForm';
-import { Elements } from '@stripe/react-stripe-js';
-import { stripePromise } from '../stripe/stripe';
+import React, { useMemo, useState, useEffect } from 'react';
+import api from '../api/api';
+import { useAuth } from '../context/AuthContext';
+import { toast } from 'react-hot-toast';
+
+const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+        if (window.Razorpay) {
+            resolve(true);
+            return;
+        }
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+    });
+};
 
 const AddMoney = () => {
+    const { token, fetchDashboardData } = useAuth();
     const [amount, setAmount] = useState('');
+    const [loading, setLoading] = useState(false);
+    
     const quickAmounts = [500, 1000, 2000, 5000];
-
     const numericAmount = Number(amount);
     const isValidAmount = numericAmount > 0;
 
     const fee = useMemo(() => {
         if (!isValidAmount) return 0;
-        return 0;
+        return 0; // Razorpay fees could be calculated here if passed to user
     }, [isValidAmount]);
 
     const total = useMemo(() => {
@@ -21,16 +36,91 @@ const AddMoney = () => {
         return numericAmount + fee;
     }, [numericAmount, fee, isValidAmount]);
 
+    useEffect(() => {
+        loadRazorpayScript();
+    }, []);
+
+    const handlePayment = async () => {
+        if (!isValidAmount) return;
+
+        try {
+            setLoading(true);
+            
+            const isLoaded = await loadRazorpayScript();
+            if (!isLoaded) {
+                toast.error('Failed to load Razorpay SDK. Check your connection.');
+                setLoading(false);
+                return;
+            }
+
+            // Create order on backend
+            const { data: orderData } = await api.post('/payments/create-order', 
+                { amount: total },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            if (!orderData.success) {
+                toast.error('Could not create order');
+                setLoading(false);
+                return;
+            }
+
+            const options = {
+                key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: 'PayPro',
+                description: 'Wallet Top-up',
+                order_id: orderData.orderId,
+                handler: async function (response) {
+                    try {
+                        const verifyData = await api.post('/payments/verify', {
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                        }, { headers: { Authorization: `Bearer ${token}` } });
+
+                        if (verifyData.data.success) {
+                            toast.success(`Successfully added ₹${numericAmount} to wallet!`);
+                            fetchDashboardData();
+                            setAmount('');
+                        } else {
+                            toast.error('Payment verification failed');
+                        }
+                    } catch (err) {
+                        console.error('Verify error:', err);
+                        toast.error(err.response?.data?.message || 'Verification error');
+                    }
+                },
+                prefill: {
+                    name: '',
+                    email: '',
+                    contact: ''
+                },
+                theme: {
+                    color: '#08111e'
+                }
+            };
+
+            const rzp = new window.Razorpay(options);
+            
+            rzp.on('payment.failed', function (response) {
+                toast.error(`Payment failed: ${response.error.description}`);
+            });
+
+            rzp.open();
+
+        } catch (error) {
+            console.error('Payment Error:', error);
+            toast.error(error.response?.data?.message || 'Something went wrong');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
-        <div className="flex min-h-screen bg-[#07111f] text-white">
-            <Sidebar />
-
-            <div className="relative flex-1 overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.10),_transparent_26%),radial-gradient(circle_at_bottom_right,_rgba(59,130,246,0.08),_transparent_28%),linear-gradient(180deg,#08111e_0%,#0b1626_100%)]" />
-                <div className="absolute inset-0 opacity-[0.06] [background-image:linear-gradient(rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px)] [background-size:72px_72px]" />
-
-                <div className="relative z-10 h-screen overflow-y-auto px-5 py-6 sm:px-8 lg:px-10">
-                    <div className="mx-auto max-w-6xl">
+        <>
+            <div className="mx-auto max-w-6xl">
                         <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                             <div>
                                 <p className="mb-2 text-xs font-medium uppercase tracking-[0.24em] text-cyan-300/75">
@@ -40,7 +130,7 @@ const AddMoney = () => {
                                     Add money
                                 </h1>
                                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-400 sm:text-base">
-                                    Top up your balance securely using Stripe and continue payments without interruption.
+                                    Top up your balance securely using Razorpay and continue payments without interruption.
                                 </p>
                             </div>
 
@@ -49,7 +139,7 @@ const AddMoney = () => {
                                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
                                         Payment gateway
                                     </p>
-                                    <p className="mt-1 text-sm font-medium text-white">Stripe</p>
+                                    <p className="mt-1 text-sm font-medium text-white">Razorpay</p>
                                 </div>
                                 <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
                                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
@@ -165,50 +255,15 @@ const AddMoney = () => {
                                         </div>
                                     </div>
 
-                                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                                        <div className="flex items-start gap-3">
-                                            <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/10 text-emerald-300">
-                                                <svg
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    className="h-5 w-5"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke="currentColor"
-                                                    strokeWidth={1.8}
-                                                >
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        d="M12 3l7 4v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V7l7-4z"
-                                                    />
-                                                </svg>
-                                            </div>
-
-                                            <div>
-                                                <h3 className="text-sm font-medium text-white">
-                                                    Protected top-up flow
-                                                </h3>
-                                                <p className="mt-1 text-sm leading-6 text-slate-400">
-                                                    Your payment is processed through a secure Stripe checkout experience.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
                                     {isValidAmount && (
-                                        <div className="rounded-[24px] border border-white/10 bg-[#08111d]/80 p-5 sm:p-6">
-                                            <div className="mb-4">
-                                                <h3 className="text-lg font-semibold text-white">
-                                                    Complete payment
-                                                </h3>
-                                                <p className="mt-1 text-sm text-slate-400">
-                                                    Review the amount and finish your secure payment below.
-                                                </p>
-                                            </div>
-
-                                            <Elements stripe={stripePromise}>
-                                                <CheckoutForm amount={amount} />
-                                            </Elements>
+                                        <div className="mt-6">
+                                            <button
+                                                onClick={handlePayment}
+                                                disabled={loading}
+                                                className={`w-full rounded-2xl py-4 text-base font-semibold transition-all duration-200 ${loading ? 'bg-cyan-500/50 cursor-not-allowed text-white/70' : 'bg-cyan-500 hover:bg-cyan-400 text-[#08111e]'}`}
+                                            >
+                                                {loading ? 'Processing...' : `Proceed to Pay ₹${total.toLocaleString('en-IN')}`}
+                                            </button>
                                         </div>
                                     )}
                                 </div>
@@ -243,7 +298,7 @@ const AddMoney = () => {
 
                                         <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
                                             <span className="text-sm text-slate-400">Gateway</span>
-                                            <span className="text-sm font-medium text-white">Stripe</span>
+                                            <span className="text-sm font-medium text-white">Razorpay</span>
                                         </div>
                                     </div>
                                 </div>
@@ -271,17 +326,15 @@ const AddMoney = () => {
                                         <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                                             <h3 className="text-sm font-medium text-white">Secure checkout</h3>
                                             <p className="mt-2 text-sm leading-6 text-slate-400">
-                                                Payment details are handled through Stripe’s secure payment flow.
+                                                Payment details are handled securely through Razorpay's encrypted gateway.
                                             </p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
             </div>
-        </div>
+        </>
     );
 };
 

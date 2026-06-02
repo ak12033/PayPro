@@ -9,6 +9,9 @@ const transactionSchema = new mongoose.Schema({
     category: String,
     icon: {type: String, default: 'ShoppingBag'},
     invoiceId: { type: String, unique: true, required: true },
+    riskScore: { type: Number, default: 0 },
+    riskLevel: { type: String, enum: ['low', 'medium', 'high'], default: 'low' },
+    riskReason: { type: String, default: '' },
 }, { timestamps: true });
 
 

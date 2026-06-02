@@ -1,0 +1,35 @@
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Logs
+logs/
+*.log
+
+# Build folders
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Firebase Service Account
+server/config/*firebase*.json
+server/config/*service-account*.json
+server/config/paypro-64e9a-firebase-adminsdk-fbsvc-65d08e5fb2.json

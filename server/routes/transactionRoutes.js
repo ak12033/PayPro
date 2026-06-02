@@ -1,5 +1,5 @@
 import express from 'express';
-import { addTransaction, getPaginatedTransactions, getTransactions, getTransactionSummary, sendMoney } from '../controllers/transactionController.js';
+import { addTransaction, getPaginatedTransactions, getTransactions, getTransactionSummary, sendMoney, getAiInsights, askAiAssistant } from '../controllers/transactionController.js';
 import authMiddleware from '../middlewares/authMiddleware.js';
 import { resendOtp, verifyOtp } from '../controllers/otpController.js';
 
@@ -12,5 +12,7 @@ transactionRouter.get('/summary', authMiddleware, getTransactionSummary);
 transactionRouter.post('/verify-otp', verifyOtp);
 transactionRouter.post('/resend-otp', resendOtp);
 transactionRouter.get('/recent', authMiddleware, getTransactions);
+transactionRouter.get('/insights', authMiddleware, getAiInsights);
+transactionRouter.post('/assistant', authMiddleware, askAiAssistant);
 
 export default transactionRouter;
