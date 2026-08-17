@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same branch cancels the previous run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: API — tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci
+
+      # The suite spins up its own in-memory replica set via
+      # mongodb-memory-server, so no service container is needed.
+      - name: Run tests
+        run: npm test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: ci-secret-that-is-at-least-32-characters-long
+
+  client:
+    name: Web — lint & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npx eslint src --ext .js,.jsx --max-warnings 20
+
+      - name: Production build
+        run: npm run build
+        env:
+          VITE_BACKEND_URL: https://api.example.com
+
+  ai:
+    name: AI service — import check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fastapi-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: fastapi-server/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Compile check
+        run: python -m compileall -q app
+
+      # Proves the app actually constructs (routes register, deps resolve)
+      # rather than only that the files parse.
+      - name: Import app
+        run: python -c "from app.main import app; print(f'{len(app.routes)} routes registered')"
+        env:
+          GEMINI_API_KEY: ci-placeholder
+          ENVIRONMENT: development

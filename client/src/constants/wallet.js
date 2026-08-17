@@ -1,0 +1,43 @@
+export const QUICK_TOPUP_AMOUNTS = [500, 1000, 2000, 5000];
+
+/**
+ * Presets for the send flow.
+ *
+ * Lower than the top-up presets on purpose: people top up in round hundreds and
+ * thousands, but the median peer-to-peer transfer is a split bill. Reusing the
+ * top-up ladder here would put ₹5,000 one tap away from an accidental send.
+ */
+export const QUICK_SEND_AMOUNTS = [100, 250, 500, 1000];
+
+export const RAZORPAY_CHECKOUT_URL = 'https://checkout.razorpay.com/v1/checkout.js';
+
+/**
+ * Razorpay's checkout is an iframe we do not control the internals of, so the
+ * best we can do is hand it a colour that matches the app. It is read at call
+ * time from the live theme rather than hardcoded, so the payment sheet does not
+ * arrive as a dark slab in the middle of a light-themed session.
+ */
+export const getRazorpayThemeColor = () =>
+    document.documentElement.getAttribute('data-theme') === 'dark' ? '#121923' : '#2563eb';
+
+/**
+ * Payment lifecycle, as Razorpay reports it.
+ *
+ * Each status now carries the *label the user should read*, not just a colour.
+ * The previous map was four Tailwind class strings keyed by status, so the only
+ * thing distinguishing "created" from "failed" in the UI was hue — and
+ * "created" was rendered in amber, which reads as a warning when it actually
+ * means "we are waiting for the bank".
+ */
+export const PAYMENT_STATUS = {
+    captured: { label: 'Completed', tone: 'positive' },
+    created: { label: 'Processing', tone: 'warning' },
+    authorized: { label: 'Processing', tone: 'warning' },
+    failed: { label: 'Failed', tone: 'negative' },
+    refunded: { label: 'Refunded', tone: 'info' },
+};
+
+export const PAYMENT_STATUS_FALLBACK = { label: 'Unknown', tone: 'neutral' };
+
+export const getPaymentStatus = (status) =>
+    PAYMENT_STATUS[status] ?? PAYMENT_STATUS_FALLBACK;

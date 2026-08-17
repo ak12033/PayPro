@@ -1,370 +1,651 @@
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 import Transaction from '../models/Transaction.js';
 import User from '../models/User.js';
-import { generateInvoiceId } from '../utils/generateInvoiceId.js';
+import Otp, { OTP_TTL_MS } from '../models/Otp.js';
 import { categorizeTransaction, checkFraud, getInsights, getAssistantResponse } from '../utils/fastapiClient.js';
-import Otp from '../models/Otp.js';
 import sendOtp from '../utils/sendOtp.js';
-import bcrypt from 'bcryptjs';
 import { notifyUser } from '../services/notificationService.js';
 import { emitToUser } from '../utils/socket.js';
+import {
+    transferFunds,
+    applyManualTransaction,
+    LedgerError
+} from '../services/ledgerService.js';
+import { parseAmount } from '../utils/money.js';
+import { asString, asObjectId, asInt, asEnum, escapeRegex } from '../utils/sanitize.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { audit } from '../services/auditService.js';
+import { AUDIT } from '../models/AuditLog.js';
+import logger from '../utils/logger.js';
 
-export const addTransaction = async (req, res) => {
-    try {
-        const { description, amount, type = 'Debit' } = req.body;
-        const numericAmount = Number(amount);
+const TRANSFER_2FA_THRESHOLD = 5; // transfers to the same recipient per day
+const OTP_BCRYPT_ROUNDS = 10;
 
-        if (isNaN(numericAmount) || numericAmount <= 0) {
-            return res.status(400).json({ message: 'Amount must be a positive number' });
-        }
+/**
+ * Categories a user may pick by hand on the Add Transaction form, and the icon
+ * each maps to. Anything outside this list falls through to AI categorisation.
+ * Kept in sync with the options rendered by the client.
+ */
+export const MANUAL_CATEGORIES = [
+    'General', 'Food', 'Transport', 'Bills', 'Shopping', 'Health',
+    'Groceries', 'Entertainment', 'Education', 'Rent', 'Travel', 'Others'
+];
 
-        const user = await User.findById(req.user.id);
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
+const CATEGORY_ICONS = {
+    General: 'CircleDollarSign',
+    Food: 'Utensils',
+    Transport: 'Car',
+    Bills: 'Receipt',
+    Shopping: 'ShoppingBag',
+    Health: 'HeartPulse',
+    Groceries: 'ShoppingCart',
+    Entertainment: 'Tv',
+    Education: 'GraduationCap',
+    Rent: 'Home',
+    Travel: 'Plane',
+    Others: 'CircleDollarSign',
+};
 
-        if (type === 'Debit' && user.accountBalance < numericAmount) {
+/** How many transfers this sender has made to this recipient since midnight. */
+const dailyTransferCount = async (senderId, recipientId) => {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    return Transaction.countDocuments({
+        userId: senderId,
+        recipientId,
+        type: 'Debit',
+        category: 'Transfer',
+        createdAt: { $gte: startOfDay }
+    });
+};
+
+/**
+ * Issue a transfer-scoped OTP whose context is pinned to the exact recipient
+ * and amount being authorised.
+ *
+ * Previously the pending transfer was held in the browser's localStorage and
+ * replayed to the server after OTP verification — so a user could approve a
+ * ₹100 transfer by email, then edit localStorage and send ₹100,000, because the
+ * server never checked that the verified challenge matched the executed
+ * transfer.
+ */
+export const issueTransferChallenge = async (sender, recipientId, amount) => {
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = await bcrypt.hash(otp, OTP_BCRYPT_ROUNDS);
+
+    // Only one live transfer challenge per user at a time.
+    await Otp.deleteMany({ email: sender.email, purpose: 'transfer' });
+
+    const record = await Otp.create({
+        email: sender.email,
+        otpHash,
+        purpose: 'transfer',
+        context: { recipientId: String(recipientId), amount },
+        expiry: new Date(Date.now() + OTP_TTL_MS)
+    });
+
+    // Email delivery must not block or fail the API response.
+    sendOtp(sender.email, otp, 'transfer').catch((err) =>
+        console.error('Transfer OTP delivery failed:', err.message)
+    );
+
+    return record;
+};
+
+export const addTransaction = asyncHandler(async (req, res) => {
+    const description = asString(req.body?.description, { maxLength: 280 });
+    if (!description) {
+        return res.status(400).json({ message: 'Description is required' });
+    }
+
+    const parsed = parseAmount(req.body?.amount);
+    if (!parsed.ok) {
+        return res.status(400).json({ message: parsed.error });
+    }
+
+    /**
+     * The client sends 'expense'/'income'. Reject anything unrecognised rather
+     * than defaulting: the old code treated every non-'Debit' value as a
+     * Credit, so posting `type: "anything"` minted balance out of nothing.
+     */
+    const rawType = asString(req.body?.type) || 'Debit';
+    const typeMap = {
+        expense: 'Debit', debit: 'Debit', Debit: 'Debit',
+        income: 'Credit', credit: 'Credit', Credit: 'Credit'
+    };
+    const type = typeMap[rawType];
+    if (!type) {
+        return res.status(400).json({ message: 'Type must be one of: expense, income' });
+    }
+
+    const amount = parsed.value;
+
+    // Cheap pre-check so we can fail fast before paying for two AI calls. The
+    // authoritative, race-free check happens inside the ledger service.
+    if (type === 'Debit') {
+        const user = await User.findById(req.user.id).select('accountBalance');
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        if (user.accountBalance < amount) {
             return res.status(400).json({ message: 'Insufficient balance' });
         }
+    }
 
-        // 1. AI Categorization via FastAPI
-        const aiCategoryData = await categorizeTransaction(description, numericAmount);
-        const category = aiCategoryData.category;
-        const icon = aiCategoryData.icon;
+    const history = await Transaction.find({ userId: req.user.id })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select('description amount type category createdAt -_id')
+        .lean();
 
-        // 2. Fetch history for fraud check
-        const history = await Transaction.find({ userId: req.user.id })
-            .sort({ createdAt: -1 })
-            .limit(10)
-            .select('description amount type category createdAt -_id');
+    /**
+     * Honour an explicitly chosen category.
+     *
+     * The Add Transaction form has always had a category dropdown and has
+     * always posted the selected value — but the server discarded it and used
+     * whatever Gemini returned instead. A user who picked "Food" could watch
+     * their transaction get filed under "Shopping", with no way to correct it.
+     *
+     * When the user picks one we skip the categorisation call entirely, which
+     * also removes a Gemini round trip from the request.
+     */
+    const chosenCategory = asEnum(req.body?.category, MANUAL_CATEGORIES);
 
-        // 3. AI Fraud Check via FastAPI
-        const fraudResult = await checkFraud({
-            description, amount: numericAmount, type, category
-        }, history);
+    const [aiCategoryData, fraudResult] = await Promise.all([
+        // These two AI calls are independent. Running them sequentially
+        // previously doubled the user-visible latency of every transaction.
+        chosenCategory
+            ? Promise.resolve({ category: chosenCategory, icon: CATEGORY_ICONS[chosenCategory] })
+            : categorizeTransaction(description, amount),
+        checkFraud({ description, amount, type, category: chosenCategory }, history)
+    ]);
 
-        // 4. Create transaction
-        const transaction = await Transaction.create({
+    let result;
+    try {
+        result = await applyManualTransaction({
             userId: req.user.id,
             description,
-            amount: numericAmount,
+            amount,
             type,
-            category,
-            icon,
-            invoiceId: generateInvoiceId(),
-            riskScore: fraudResult.risk_score,
-            riskLevel: fraudResult.risk_level,
-            riskReason: fraudResult.reason
-        });
-
-        // 5. Update Balance
-        if (type === 'Debit') {
-            user.accountBalance -= numericAmount;
-        } else {
-            user.accountBalance += numericAmount;
-        }
-        await user.save();
-
-        emitToUser(user._id.toString(), 'wallet_update', {
-            newBalance: user.accountBalance,
-            transaction
-        });
-
-        if (fraudResult.risk_level === 'high') {
-            await notifyUser(
-                req.user.id,
-                'Security',
-                'High Risk Transaction Detected',
-                `A recent transaction of ₹${numericAmount} for "${description}" was flagged as high risk. Please review your account.`,
-                { amount: numericAmount, transactionId: transaction._id.toString() }
-            );
-        }
-
-        res.status(201).json({ message: 'Transaction added successfully', transaction });
-    } catch (err) {
-        console.error('Add Transaction Error:', err);
-        res.status(500).json({ message: 'Failed to add transaction' });
-    }
-};
-
-export const getPaginatedTransactions = async (req, res) => {
-    try {
-        const { 
-            page = 1, 
-            limit = 10, 
-            search = '',
-            type,
-            category,
-            minAmount,
-            maxAmount,
-            startDate,
-            endDate,
-            sortBy = 'createdAt',
-            sortOrder = 'desc'
-        } = req.query;
-
-        const query = { userId: req.user.id };
-
-        // Advanced Search & Filtering
-        if (search) {
-            query.description = { $regex: search, $options: 'i' };
-        }
-        if (type) {
-            query.type = type;
-        }
-        if (category) {
-            query.category = category;
-        }
-        if (minAmount || maxAmount) {
-            query.amount = {};
-            if (minAmount) query.amount.$gte = Number(minAmount);
-            if (maxAmount) query.amount.$lte = Number(maxAmount);
-        }
-        if (startDate || endDate) {
-            query.createdAt = {};
-            if (startDate) query.createdAt.$gte = new Date(startDate);
-            if (endDate) query.createdAt.$lte = new Date(endDate);
-        }
-
-        // Sorting
-        const sortOptions = {};
-        sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-        const total = await Transaction.countDocuments(query);
-        const transactions = await Transaction.find(query)
-            .sort(sortOptions)
-            .skip((Number(page) - 1) * Number(limit))
-            .limit(Number(limit));
-
-        res.status(200).json({
-            transactions,
-            total,
-            currentPage: Number(page),
-            totalPages: Math.ceil(total / Number(limit)),
+            category: aiCategoryData.category,
+            icon: aiCategoryData.icon,
+            risk: fraudResult
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
-};
-
-export const getAiInsights = async (req, res) => {
-    try {
-        // Fetch recent transactions for insights
-        const transactions = await Transaction.find({ userId: req.user.id })
-            .sort({ createdAt: -1 })
-            .limit(50)
-            .select('description amount type category createdAt -_id');
-
-        const insights = await getInsights(transactions);
-
-        res.status(200).json({ insights });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
-export const askAiAssistant = async (req, res) => {
-    try {
-        const { query } = req.body;
-        if (!query) return res.status(400).json({ message: 'Query is required' });
-
-        // Fetch recent transactions for context
-        const transactions = await Transaction.find({ userId: req.user.id })
-            .sort({ createdAt: -1 })
-            .limit(20)
-            .select('description amount type category createdAt -_id');
-
-        const response = await getAssistantResponse(query, transactions);
-
-        res.status(200).json({ response });
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-};
-
-export const sendMoney = async (req, res) => {
-    try {
-        const { recipientId, amount, skip2FA } = req.body;
-        const numericAmount = Number(amount);
-
-        if (isNaN(numericAmount) || numericAmount <= 0)
-            return res.status(400).json({ message: 'Amount must be positive' });
-
-        const sender = await User.findById(req.user.id);
-        const recipient = await User.findById(recipientId);
-
-        if (!recipient)
-            return res.status(404).json({ message: 'Recipient not found' });
-
-        if (sender.accountBalance < numericAmount)
-            return res.status(400).json({ message: 'Insufficient balance' });
-
-        // Check number of transactions today
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-
-        const transferCount = await Transaction.countDocuments({
-            userId: sender._id,
-            recipientId: recipient._id,
-            type: 'Debit',
-            category: 'Transfer',
-            createdAt: { $gte: startOfDay },
-        });
-
-        // If 5+ transfers, trigger 2FA unless skip2FA is true
-        if (transferCount >= 5 && !skip2FA) {
-            const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-            const salt = await bcrypt.genSalt(10);
-            const otpHash = await bcrypt.hash(otp, salt);
-
-            await Otp.create({
-                email: sender.email,
-                otpHash,
-                expiry: Date.now() + 10 * 60 * 1000 // 10 min expiry
-            });
-
-            await sendOtp(sender.email, otp);
-
-            return res.status(403).json({
-                message: `2FA Required: An OTP has been sent to ${sender.email}`,
-                require2FA: true,
-                email: sender.email,
-            });
+        if (err instanceof LedgerError) {
+            return res.status(err.status).json({ message: err.message });
         }
+        throw err;
+    }
 
-        // History for sender fraud check
-        const history = await Transaction.find({ userId: sender._id })
-            .sort({ createdAt: -1 })
-            .limit(10)
-            .select('description amount type category createdAt -_id');
+    const { user, transaction } = result;
 
-        // Fraud check for sender
-        const fraudResult = await checkFraud({
-            description: `P2P transfer to ${recipient.firstName}`,
-            amount: numericAmount,
-            type: 'Debit',
-            category: 'Transfer'
-        }, history);
+    emitToUser(user._id.toString(), 'wallet_update', {
+        newBalance: user.accountBalance,
+        transaction
+    });
 
-        // Proceed with transfer
-        const senderTx = await Transaction.create({
-            userId: sender._id,
-            recipientId: recipient._id,
-            description: `P2P transfer to ${recipient.firstName}`,
-            amount: numericAmount,
-            type: 'Debit',
-            category: 'Transfer',
-            icon: 'Send',
-            invoiceId: generateInvoiceId(),
-            riskScore: fraudResult.risk_score,
-            riskLevel: fraudResult.risk_level,
-            riskReason: fraudResult.reason
+    audit(AUDIT.TRANSACTION_ADDED, {
+        userId: user._id, req,
+        target: { type: 'Transaction', id: String(transaction._id) },
+        metadata: { amount, type, category: transaction.category }
+    });
+
+    if (fraudResult.risk_level === 'high') {
+        audit(AUDIT.HIGH_RISK_FLAGGED, {
+            userId: req.user.id, req,
+            target: { type: 'Transaction', id: String(transaction._id) },
+            metadata: { amount, riskScore: fraudResult.risk_score, reason: fraudResult.reason }
         });
-
-        const recipientTx = await Transaction.create({
-            userId: recipient._id,
-            recipientId: sender._id,
-            description: `P2P transfer from ${sender.firstName}`,
-            amount: numericAmount,
-            type: 'Credit',
-            category: 'Transfer',
-            icon: 'Download',
-            invoiceId: generateInvoiceId(),
-            riskScore: 0,
-            riskLevel: 'low',
-            riskReason: 'Incoming transfer'
-        });
-
-        sender.accountBalance -= numericAmount;
-        recipient.accountBalance += numericAmount;
-
-        await sender.save();
-        await recipient.save();
-
-        emitToUser(sender._id.toString(), 'wallet_update', {
-            newBalance: sender.accountBalance,
-            transaction: senderTx
-        });
-
-        emitToUser(recipient._id.toString(), 'wallet_update', {
-            newBalance: recipient.accountBalance,
-            transaction: recipientTx
-        });
-
-        // Notify Sender
         await notifyUser(
-            sender._id,
+            req.user.id,
+            'Security',
+            'High Risk Transaction Detected',
+            `A recent transaction of ₹${amount} for "${description}" was flagged as high risk. Please review your account.`,
+            { amount, transactionId: transaction._id.toString() }
+        );
+    }
+
+    res.status(201).json({
+        message: 'Transaction added successfully',
+        transaction,
+        balance: user.accountBalance
+    });
+});
+
+export const getPaginatedTransactions = asyncHandler(async (req, res) => {
+    const page = asInt(req.query.page, { min: 1, max: 100000, fallback: 1 });
+    const limit = asInt(req.query.limit, { min: 1, max: 100, fallback: 10 });
+
+    const query = { userId: new mongoose.Types.ObjectId(req.user.id) };
+
+    /**
+     * Every filter below is allow-listed or coerced to a primitive. Passing
+     * req.query values straight into a Mongoose filter let a caller send
+     * `?type[$ne]=Debit` and rewrite the query's meaning.
+     */
+    const search = asString(req.query.search, { maxLength: 100 });
+    if (search) {
+        // Escaped: an unescaped user regex is both a ReDoS vector and a way to
+        // widen the filter (e.g. `.*`).
+        query.description = { $regex: escapeRegex(search), $options: 'i' };
+    }
+
+    const type = asEnum(req.query.type, ['Credit', 'Debit']);
+    if (type) query.type = type;
+
+    const category = asString(req.query.category, { maxLength: 60 });
+    if (category) query.category = category;
+
+    /**
+     * Named presets for the history page's filter chips.
+     *
+     * The UI has always sent `?filter=Transfer|Received|Payment|All`, but no
+     * version of this handler ever read a `filter` parameter — it only looked
+     * at `type` and `category`. The chips therefore did nothing at all: every
+     * one of them returned the identical unfiltered list, and the "Current
+     * filter" label on the page reported a filter that was never applied.
+     *
+     * Presets are resolved server-side so the meaning of "Payment" lives in one
+     * place rather than being re-derived by each client.
+     */
+    const PRESETS = {
+        Transfer: { type: 'Debit', category: 'Transfer' },
+        Received: { type: 'Credit', category: 'Transfer' },
+        TopUp: { type: 'Credit', category: { $in: ['Top Up', 'Stripe'] } },
+        Payment: { type: 'Debit', category: { $nin: ['Transfer', 'Refund'] } },
+        Refund: { category: 'Refund' },
+    };
+
+    const preset = asEnum(req.query.filter, Object.keys(PRESETS));
+    if (preset) {
+        // Explicit `type`/`category` params win over the preset.
+        for (const [key, value] of Object.entries(PRESETS[preset])) {
+            if (query[key] === undefined) query[key] = value;
+        }
+    }
+
+    const minAmount = req.query.minAmount !== undefined ? Number(req.query.minAmount) : NaN;
+    const maxAmount = req.query.maxAmount !== undefined ? Number(req.query.maxAmount) : NaN;
+    if (Number.isFinite(minAmount) || Number.isFinite(maxAmount)) {
+        query.amount = {};
+        if (Number.isFinite(minAmount)) query.amount.$gte = minAmount;
+        if (Number.isFinite(maxAmount)) query.amount.$lte = maxAmount;
+    }
+
+    const start = asString(req.query.startDate) ? new Date(req.query.startDate) : null;
+    const end = asString(req.query.endDate) ? new Date(req.query.endDate) : null;
+    const validStart = start && !Number.isNaN(start.getTime());
+    const validEnd = end && !Number.isNaN(end.getTime());
+    if (validStart || validEnd) {
+        query.createdAt = {};
+        if (validStart) query.createdAt.$gte = start;
+        if (validEnd) query.createdAt.$lte = end;
+    }
+
+    // Allow-listed sort fields: an arbitrary `sortBy` lets a caller sort on an
+    // unindexed field and force an in-memory sort of the whole collection.
+    const sortBy = asEnum(req.query.sortBy, ['createdAt', 'amount'], 'createdAt');
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+
+    const [transactions, total] = await Promise.all([
+        Transaction.find(query)
+            .sort({ [sortBy]: sortOrder })
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .lean(),
+        Transaction.countDocuments(query)
+    ]);
+
+    res.status(200).json({
+        transactions,
+        total,
+        currentPage: page,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+});
+
+export const getAiInsights = asyncHandler(async (req, res) => {
+    const transactions = await Transaction.find({ userId: req.user.id })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .select('description amount type category createdAt -_id')
+        .lean();
+
+    const insights = await getInsights(transactions);
+    res.status(200).json({ insights });
+});
+
+export const askAiAssistant = asyncHandler(async (req, res) => {
+    const query = asString(req.body?.query, { maxLength: 2000 });
+    if (!query) return res.status(400).json({ message: 'Query is required' });
+
+    const transactions = await Transaction.find({ userId: req.user.id })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .select('description amount type category createdAt -_id')
+        .lean();
+
+    const response = await getAssistantResponse(query, transactions);
+    res.status(200).json({ response });
+});
+
+/**
+ * Shared execution path for both the direct and the OTP-verified transfer.
+ * Returns `{ error, status }` for expected business failures.
+ */
+export const executeTransfer = async ({ sender, recipient, amount, idempotencyKey }) => {
+    const history = await Transaction.find({ userId: sender._id })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select('description amount type category createdAt -_id')
+        .lean();
+
+    const fraudResult = await checkFraud({
+        description: `P2P transfer to ${recipient.firstName}`,
+        amount,
+        type: 'Debit',
+        category: 'Transfer'
+    }, history);
+
+    let outcome;
+    try {
+        outcome = await transferFunds({
+            senderId: sender._id,
+            recipientId: recipient._id,
+            amount,
+            senderName: sender.firstName,
+            recipientName: recipient.firstName,
+            risk: fraudResult
+        });
+    } catch (err) {
+        if (err instanceof LedgerError) {
+            return { error: err.message, status: err.status };
+        }
+        throw err;
+    }
+
+    const { senderTx, recipientTx } = outcome;
+
+    if (idempotencyKey) {
+        // A duplicate-key rejection here is benign: the transfer itself settled.
+        await Transaction.updateOne({ _id: senderTx._id }, { $set: { idempotencyKey } })
+            .catch(() => {});
+    }
+
+    emitToUser(outcome.sender._id.toString(), 'wallet_update', {
+        newBalance: outcome.sender.accountBalance,
+        transaction: senderTx
+    });
+    emitToUser(outcome.recipient._id.toString(), 'wallet_update', {
+        newBalance: outcome.recipient.accountBalance,
+        transaction: recipientTx
+    });
+
+    // Notifications are best-effort and must never roll back a settled transfer.
+    Promise.all([
+        notifyUser(
+            outcome.sender._id,
             'Transfer',
             'Transfer Successful',
-            `You successfully sent ₹${numericAmount} to ${recipient.firstName}.`,
-            { amount: numericAmount, recipient: recipient.firstName }
-        );
-
-        // Notify Recipient
-        await notifyUser(
-            recipient._id,
+            `You successfully sent ₹${amount} to ${recipient.firstName}.`,
+            { amount, recipient: recipient.firstName }
+        ),
+        notifyUser(
+            outcome.recipient._id,
             'Transfer',
             'Money Received',
-            `You received ₹${numericAmount} from ${sender.firstName}.`,
-            { amount: numericAmount, sender: sender.firstName }
-        );
-
-        // Fraud alert if sender transaction is high risk
-        if (fraudResult.risk_level === 'high') {
-            await notifyUser(
-                sender._id,
+            `You received ₹${amount} from ${sender.firstName}.`,
+            { amount, sender: sender.firstName }
+        ),
+        fraudResult.risk_level === 'high'
+            ? notifyUser(
+                outcome.sender._id,
                 'Security',
                 'High Risk Transfer Detected',
-                `Your recent transfer of ₹${numericAmount} to ${recipient.firstName} was flagged as unusual.`,
-                { amount: numericAmount }
-            );
+                `Your recent transfer of ₹${amount} to ${recipient.firstName} was flagged as unusual.`,
+                { amount }
+            )
+            : Promise.resolve()
+    ]).catch((err) => console.error('Post-transfer notification error:', err.message));
+
+    return outcome;
+};
+
+export const sendMoney = asyncHandler(async (req, res) => {
+    const recipientId = asObjectId(req.body?.recipientId);
+    if (!recipientId) {
+        // Previously an invalid id reached `User.findById()` and threw a
+        // CastError, surfacing to the user as an opaque 500.
+        return res.status(400).json({ message: 'A valid recipient is required' });
+    }
+
+    const parsed = parseAmount(req.body?.amount);
+    if (!parsed.ok) {
+        return res.status(400).json({ message: parsed.error });
+    }
+    const amount = parsed.value;
+    const idempotencyKey = asString(req.body?.idempotencyKey, { maxLength: 100 });
+
+    if (String(recipientId) === String(req.user.id)) {
+        return res.status(400).json({ message: 'You cannot transfer money to yourself' });
+    }
+
+    const [sender, recipient] = await Promise.all([
+        User.findById(req.user.id).select('firstName email accountBalance preferences'),
+        User.findById(recipientId).select('firstName')
+    ]);
+
+    if (!sender) return res.status(404).json({ message: 'User not found' });
+    if (!recipient) return res.status(404).json({ message: 'Recipient not found' });
+
+    if (sender.accountBalance < amount) {
+        return res.status(400).json({ message: 'Insufficient balance' });
+    }
+
+    // Replay guard: a double-clicked button, or an axios retry after a network
+    // timeout, previously produced two genuine transfers.
+    if (idempotencyKey) {
+        const existing = await Transaction.findOne({ idempotencyKey, userId: sender._id }).lean();
+        if (existing) {
+            return res.status(200).json({
+                message: 'Transfer already processed',
+                duplicate: true,
+                senderTransactionId: existing._id
+            });
         }
-
-        res.status(200).json({
-            message: 'Transfer successful',
-            senderTransactionId: senderTx._id,
-            recipientTransactionId: recipientTx._id
-        });
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: err.message });
     }
-};
 
-export const getTransactionSummary = async (req, res) => {
-    try {
-        const transactions = await Transaction.find({ userId: req.user.id });
+    /**
+     * 2FA gate.
+     *
+     * The previous implementation read `skip2FA` straight out of the request
+     * body, so any client bypassed the entire challenge by posting
+     * `{"skip2FA": true}` on the first request. The decision is now made
+     * exclusively server-side, and the only route that can complete a
+     * challenged transfer is `verifyTransferOtp`.
+     */
+    const requires2FA =
+        sender.preferences?.transaction2FA !== false &&
+        (await dailyTransferCount(sender._id, recipientId)) >= TRANSFER_2FA_THRESHOLD;
 
-        let sent = 0;
-        let received = 0;
-        let added = 0;
+    if (requires2FA) {
+        await issueTransferChallenge(sender, recipientId, amount);
+        audit(AUDIT.TRANSFER_2FA_REQUIRED, {
+            userId: sender._id, req, target: { type: 'User', id: String(recipientId) },
+            metadata: { amount }
+        });
+        return res.status(403).json({
+            message: `2FA Required: An OTP has been sent to ${sender.email}`,
+            require2FA: true,
+            email: sender.email,
+        });
+    }
 
-        transactions.forEach((t) => {
-            if (t.type === 'Debit') {
-                sent += Math.abs(t.amount);
-            } else if (t.type === 'Credit') {
-                if (t.category === 'Top Up' || t.category === 'Stripe') {
-                    added += t.amount;
-                } else {
-                    received += t.amount;
-                }
+    const result = await executeTransfer({ sender, recipient, amount, idempotencyKey });
+    if (result.error) {
+        audit(AUDIT.TRANSFER_FAILED, {
+            userId: sender._id, outcome: 'failure', req,
+            target: { type: 'User', id: String(recipientId) },
+            metadata: { amount, reason: result.error }
+        });
+        return res.status(result.status).json({ message: result.error });
+    }
+
+    audit(AUDIT.TRANSFER_SENT, {
+        userId: sender._id, req,
+        target: { type: 'Transaction', id: String(result.senderTx._id) },
+        metadata: { amount, recipientId: String(recipient._id) }
+    });
+
+    res.status(200).json({
+        message: 'Transfer successful',
+        senderTransactionId: result.senderTx._id,
+        recipientTransactionId: result.recipientTx._id,
+        balance: result.sender.accountBalance
+    });
+});
+
+/**
+ * Wallet summary computed in the database.
+ *
+ * The previous version loaded every transaction the user had ever made into
+ * Node memory and summed them in a forEach — megabytes of BSON per dashboard
+ * load once a user has a few thousand rows.
+ */
+export const getTransactionSummary = asyncHandler(async (req, res) => {
+    const userId = new mongoose.Types.ObjectId(req.user.id);
+
+    const rows = await Transaction.aggregate([
+        { $match: { userId } },
+        {
+            $group: {
+                _id: {
+                    type: '$type',
+                    isTopUp: { $in: ['$category', ['Top Up', 'Stripe']] }
+                },
+                total: { $sum: '$amount' },
+                count: { $sum: 1 }
             }
-        });
+        }
+    ]);
 
-        res.status(200).json({ sent, received, added });
-    } catch (err) {
-        res.status(500).json({ message: err.message });
+    let sent = 0;
+    let received = 0;
+    let added = 0;
+    let count = 0;
+
+    for (const row of rows) {
+        count += row.count;
+        if (row._id.type === 'Debit') sent += row.total;
+        else if (row._id.isTopUp) added += row.total;
+        else received += row.total;
     }
+
+    res.status(200).json({
+        sent: Number(sent.toFixed(2)),
+        received: Number(received.toFixed(2)),
+        added: Number(added.toFixed(2)),
+        count
+    });
+});
+
+/**
+ * Recent activity for the dashboard.
+ *
+ * This route previously returned the user's *entire* transaction history with
+ * no limit, and the client stored all of it in context on every page load.
+ */
+export const getTransactions = asyncHandler(async (req, res) => {
+    const limit = asInt(req.query.limit, { min: 1, max: 50, fallback: 10 });
+
+    const transactions = await Transaction.find({ userId: req.user.id })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+
+    res.status(200).json({ transactions });
+});
+
+/**
+ * Escape a value for CSV.
+ *
+ * Two distinct concerns:
+ *
+ *  1. RFC-4180 quoting, so a description containing a comma, quote or newline
+ *     doesn't shift every following column.
+ *
+ *  2. CSV injection (a.k.a. formula injection). A description of
+ *     `=HYPERLINK("http://evil","click")` — or `=cmd|'/c calc'!A1` — is
+ *     interpreted as a *formula* when the exported file is opened in Excel,
+ *     Google Sheets or LibreOffice. Since transaction descriptions are attacker
+ *     controlled and users forward statements to accountants, a leading
+ *     =, +, -, @, tab or CR is prefixed with an apostrophe to force text.
+ */
+const csvCell = (value) => {
+    let s = value === null || value === undefined ? '' : String(value);
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    if (/[",\n\r]/.test(s)) s = `"${s.replace(/"/g, '""')}"`;
+    return s;
 };
 
-export const getTransactions = async (req, res) => {
+/**
+ * Stream the user's transactions as CSV.
+ *
+ * Uses a cursor rather than materialising the full result set: an account with
+ * tens of thousands of rows would otherwise be built into one giant string in
+ * memory before the first byte reached the client.
+ */
+export const exportTransactionsCsv = asyncHandler(async (req, res) => {
+    const query = { userId: new mongoose.Types.ObjectId(req.user.id) };
+
+    const type = asEnum(req.query.type, ['Credit', 'Debit']);
+    if (type) query.type = type;
+
+    const start = asString(req.query.startDate) ? new Date(req.query.startDate) : null;
+    const end = asString(req.query.endDate) ? new Date(req.query.endDate) : null;
+    const validStart = start && !Number.isNaN(start.getTime());
+    const validEnd = end && !Number.isNaN(end.getTime());
+    if (validStart || validEnd) {
+        query.createdAt = {};
+        if (validStart) query.createdAt.$gte = start;
+        if (validEnd) query.createdAt.$lte = end;
+    }
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="paypro-transactions-${stamp}.csv"`);
+    // Stop a proxy or browser from caching a statement containing financial data.
+    res.setHeader('Cache-Control', 'no-store');
+
+    // BOM so Excel opens UTF-8 (₹, accented names) correctly instead of mojibake.
+    res.write('﻿');
+    res.write('Date,Invoice ID,Description,Category,Type,Amount (INR),Risk Level\n');
+
+    const cursor = Transaction.find(query)
+        .sort({ createdAt: -1 })
+        .select('createdAt invoiceId description category type amount riskLevel')
+        .lean()
+        .cursor();
+
     try {
-        const transactions = await Transaction.find({ userId: req.user.id })
-            .sort({ createdAt: -1 });
-
-        res.status(200).json({ transactions });
+        for await (const t of cursor) {
+            res.write([
+                csvCell(new Date(t.createdAt).toISOString()),
+                csvCell(t.invoiceId),
+                csvCell(t.description),
+                csvCell(t.category),
+                csvCell(t.type),
+                csvCell(Number(t.amount).toFixed(2)),
+                csvCell(t.riskLevel),
+            ].join(',') + '\n');
+        }
+        res.end();
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        // Headers are already sent, so the error handler can't produce JSON.
+        // Destroy the response so the client sees a truncated download rather
+        // than a silently short file it might mistake for complete.
+        console.error('CSV export failed mid-stream:', err);
+        res.destroy(err);
     }
-};
+});

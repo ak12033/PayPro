@@ -3,11 +3,77 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/Icon.jpg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PayAI</title>
+    <!-- `viewport-fit=cover` is what makes env(safe-area-inset-bottom) resolve,
+         which the tab bar and bottom sheets rely on to clear the iOS home bar. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!--
+      Installability.
+
+      Not decoration: iOS delivers web push *only* to a site the user has added
+      to the home screen, and it will not offer to add one without a manifest
+      declaring a standalone display mode. Without this, notifications while the
+      app is closed are simply unavailable on iPhone, however correct the
+      service worker is.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/Icon.jpg" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="PayPro" />
+
+    <title>PayPro — Send, receive and track your money</title>
+    <meta
+      name="description"
+      content="PayPro is a wallet for sending, receiving and tracking money. Instant transfers, verified payments, and spending you can actually read."
+    />
+
+    <!--
+      Updated by ThemeProvider on every theme change so the browser chrome —
+      the status bar on iOS, the address bar on Android — matches the app
+      surface instead of staying white above a dark page.
+    -->
+    <meta name="theme-color" content="#f6f8fa" />
+
+    <!--
+      Theme, applied before first paint.
+
+      This runs synchronously in <head>, ahead of the bundle, so the correct
+      `data-theme` is on <html> before anything renders. Doing it in React
+      instead means the page paints in the default theme and then repaints — a
+      white flash on every load for every dark-mode user, which on a wallet app
+      opened in a dark room is genuinely unpleasant.
+
+      Deliberately tiny and dependency-free: it blocks rendering.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('paypro-theme');
+          var resolved =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+
+          document.documentElement.setAttribute('data-theme', resolved);
+
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0b1017' : '#f6f8fa');
+        } catch (e) {
+          // Private-mode Safari throws on localStorage; the light default stands.
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
+
+    <!-- The font sheet is render-blocking, so open the connections early. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>PayPro needs JavaScript enabled to run.</noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

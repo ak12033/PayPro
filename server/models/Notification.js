@@ -13,11 +13,13 @@ const notificationSchema = new mongoose.Schema({
     },
     title: {
         type: String,
-        required: true
+        required: true,
+        maxlength: 140
     },
     message: {
         type: String,
-        required: true
+        required: true,
+        maxlength: 1000
     },
     isRead: {
         type: Boolean,
@@ -28,5 +30,10 @@ const notificationSchema = new mongoose.Schema({
         default: {}
     }
 }, { timestamps: true });
+
+// Notification centre: newest first, per user.
+notificationSchema.index({ userId: 1, createdAt: -1 });
+// Unread badge count.
+notificationSchema.index({ userId: 1, isRead: 1 });
 
 export default mongoose.model('Notification', notificationSchema);

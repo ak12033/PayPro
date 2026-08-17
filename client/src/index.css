@@ -1,7 +1,149 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
 @import "tailwindcss";
+@import "./styles/tokens.css";
 
-*{
-    font-family: "Outfit", sans-serif;
-    box-sizing: border-box;
+/**
+ * Inter, self-described weight range, loaded with `display=swap`.
+ *
+ * The previous sheet pulled *two* families at their full variable weight range
+ * (Outfit 100–900 plus Poppins in 18 separate static cuts including italics) and
+ * then applied one of them to `*`. That is roughly 300 kB of render-blocking
+ * font for a product that uses three weights.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@layer base {
+    /* `*{font-family}` was doing this before — but it also overrode every
+       deliberate font choice in the tree, including `font-mono` on invoice
+       ids, which is why reference numbers were impossible to compare. */
+    html {
+        font-family: var(--font-sans);
+        -webkit-text-size-adjust: 100%;
+        /* Slashed zero + tabular figures. In a ledger, `0` and `O` mean very
+           different things and columns of numbers must line up. */
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: 'cv01', 'ss01';
+    }
+
+    body {
+        background-color: var(--color-canvas);
+        color: var(--color-text);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+
+    /**
+     * One focus treatment for the entire product.
+     *
+     * `focus:outline-none` was written on individual controls before, some of
+     * which never restored a visible replacement — so parts of the app were
+     * simply unusable by keyboard. `:focus-visible` shows the ring for keyboard
+     * users without putting it on every mouse click.
+     */
+    :focus-visible {
+        outline: 2px solid var(--color-focus);
+        outline-offset: 2px;
+        border-radius: var(--radius-control);
+    }
+
+    /* Inputs must never lose their focus ring, even inside a styled wrapper. */
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+        outline-offset: 0;
+    }
+
+    ::selection {
+        background-color: var(--color-accent-soft);
+        color: var(--color-accent-text);
+    }
+
+    /* Scrollbars follow the theme rather than staying light-mode grey inside a
+       dark panel. */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-border-strong) transparent;
+    }
+}
+
+@layer utilities {
+    /**
+     * Motion primitives.
+     *
+     * Declared once here rather than as per-component keyframes so that the
+     * reduced-motion override below can switch off *all* of them, which is
+     * impossible when animations are scattered through inline styles.
+     */
+    @keyframes pp-fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @keyframes pp-rise {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: none; }
+    }
+
+    @keyframes pp-sheet-up {
+        from { transform: translateY(100%); }
+        to { transform: none; }
+    }
+
+    @keyframes pp-pop {
+        0%   { transform: scale(0.9); opacity: 0; }
+        60%  { transform: scale(1.03); opacity: 1; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes pp-shimmer {
+        from { background-position: 200% 0; }
+        to { background-position: -200% 0; }
+    }
+
+    .animate-fade-in { animation: pp-fade-in var(--duration-normal) var(--ease-out) both; }
+    .animate-rise { animation: pp-rise var(--duration-normal) var(--ease-out) both; }
+    .animate-sheet-up { animation: pp-sheet-up var(--duration-slow) var(--ease-out) both; }
+    .animate-pop { animation: pp-pop var(--duration-slow) var(--ease-spring) both; }
+
+    /* Staggers a list without a JS animation library: each row reads its own
+       index off a CSS variable set inline. */
+    .stagger > * {
+        animation: pp-rise var(--duration-normal) var(--ease-out) both;
+        animation-delay: calc(var(--stagger-index, 0) * 40ms);
+    }
+
+    /* Skeletons sweep rather than pulse. A pulsing block reads as an error
+       indicator; a sweep reads as "in progress". */
+    .skeleton {
+        background: linear-gradient(
+            90deg,
+            var(--color-surface-sunken) 25%,
+            var(--color-surface-active) 50%,
+            var(--color-surface-sunken) 75%
+        );
+        background-size: 200% 100%;
+        animation: pp-shimmer 1.4s linear infinite;
+    }
+
+    /* Applied to the tab bar and any bottom-anchored sheet so controls clear
+       the iOS home indicator. */
+    .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+}
+
+/**
+ * Reduced motion.
+ *
+ * A blanket kill rather than per-component opt-outs: `prefers-reduced-motion`
+ * is frequently set because motion causes the user actual nausea, so the
+ * correct behaviour is "no motion", not "less motion". Transitions are reduced
+ * to 1ms rather than 0 so that `transitionend` handlers still fire.
+ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 1ms !important;
+        scroll-behavior: auto !important;
+    }
 }

@@ -1,0 +1,85 @@
+# Local development stack.
+#
+# The Mongo service runs as a single-node REPLICA SET, not a standalone server:
+# the ledger relies on multi-document transactions, and those are unavailable
+# on a standalone mongod. Running standalone locally would silently exercise
+# the compensating-write fallback instead of the code path used in production.
+
+services:
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiates the replica set on first boot, then reports healthy once the
+      # node has actually become primary.
+      test: >
+        mongosh --quiet --eval "
+          try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }
+        "
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+
+  ai:
+    build:
+      context: ./fastapi-server
+    environment:
+      ENVIRONMENT: development
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      FASTAPI_API_KEY: ${FASTAPI_API_KEY:-local-dev-shared-secret}
+    ports:
+      - "8000:8000"
+
+  api:
+    build:
+      context: ./server
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ai:
+        condition: service_started
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      # directConnection is required to talk to a single-node replica set by
+      # hostname without the driver trying to resolve the whole set topology.
+      MONGO_URI: mongodb://mongo:27017/?replicaSet=rs0&directConnection=true
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-at-least-32-characters-long}
+      CORS_ORIGIN: http://localhost:5173,http://localhost:8080
+      FASTAPI_URL: http://ai:8000
+      FASTAPI_API_KEY: ${FASTAPI_API_KEY:-local-dev-shared-secret}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASS: ${EMAIL_PASS:-}
+      ENABLE_CRON: "true"
+    ports:
+      - "5000:5000"
+
+  web:
+    build:
+      context: ./client
+      args:
+        VITE_BACKEND_URL: http://localhost:5000
+        VITE_RAZORPAY_KEY_ID: ${VITE_RAZORPAY_KEY_ID:-}
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-}
+        VITE_FIREBASE_STORAGE_BUCKET: ${VITE_FIREBASE_STORAGE_BUCKET:-}
+        VITE_FIREBASE_MESSAGING_SENDER_ID: ${VITE_FIREBASE_MESSAGING_SENDER_ID:-}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
+        VITE_FIREBASE_VAPID_KEY: ${VITE_FIREBASE_VAPID_KEY:-}
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  mongo-data:

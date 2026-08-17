@@ -8,25 +8,37 @@ const chatMessageSchema = new mongoose.Schema({
     },
     text: {
         type: String,
-        required: true
+        required: true,
+        maxlength: 8000
     },
     createdAt: {
         type: Date,
         default: Date.now
     }
-});
+}, { _id: false });
 
 const chatSessionSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
-        unique: true, // Only one chat session/history per user to keep it simple and clean
-        index: true
+        unique: true // one rolling history per user
     },
     messages: [chatMessageSchema]
 }, {
     timestamps: true
 });
+
+/**
+ * Hard cap on retained turns.
+ *
+ * The history array was previously unbounded: it grew until the document hit
+ * MongoDB's 16MB limit (at which point every save failed permanently), and the
+ * entire array was replayed to Gemini on every single message, so token cost
+ * grew quadratically with conversation length.
+ */
+export const MAX_CHAT_MESSAGES = 40;
+
+// `unique: true` above already creates the userId index.
 
 export default mongoose.model('ChatSession', chatSessionSchema);

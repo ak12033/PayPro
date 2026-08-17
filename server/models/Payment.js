@@ -16,7 +16,8 @@ const paymentSchema = new mongoose.Schema({
     },
     amount: {
         type: Number,
-        required: true
+        required: true,
+        min: 0
     },
     currency: {
         type: String,
@@ -32,7 +33,23 @@ const paymentSchema = new mongoose.Schema({
     },
     refundId: {
         type: String
-    }
+    },
+    /**
+     * Set once the wallet has actually been credited for this order.
+     *
+     * The capture path and the webhook path both used to credit the balance
+     * after independently reading `status`, so a webhook arriving while
+     * /payments/verify was in flight double-credited the user. Crediting is now
+     * gated on a single atomic transition into this flag.
+     */
+    walletCredited: { type: Boolean, default: false },
+    walletDebitedOnRefund: { type: Boolean, default: false }
 }, { timestamps: true });
+
+// History page: filter by user, newest first.
+paymentSchema.index({ userId: 1, createdAt: -1 });
+// Refund webhooks look payments up by gateway payment id.
+// sparse, because paymentId is null until the order is actually paid.
+paymentSchema.index({ paymentId: 1 }, { sparse: true });
 
 export default mongoose.model('Payment', paymentSchema);

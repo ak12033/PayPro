@@ -1,117 +1,225 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '../api/api';
-import { useAuth } from './AuthContext';
-import { requestForToken, onMessageListener } from '../firebase';
+import React, {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { toast } from 'react-hot-toast';
+import { useAuth } from './AuthContext';
+import { notificationApi } from '../services/api/endpoints/notificationApi';
+import {
+    requestNotificationToken,
+    onForegroundMessage,
+    getPushPermission,
+} from '../services/firebase';
+import ToastCard from '../components/feedback/ToastCard';
 
-const NotificationContext = createContext();
+const NotificationContext = createContext(null);
 
-export const useNotifications = () => useContext(NotificationContext);
+export const useNotifications = () => {
+    const context = useContext(NotificationContext);
+    if (!context) {
+        throw new Error('useNotifications must be used within a NotificationProvider');
+    }
+    return context;
+};
 
 export const NotificationProvider = ({ children }) => {
     const { token, isCheckingAuth } = useAuth();
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [pushPermission, setPushPermission] = useState(getPushPermission);
+
+    // Guards against re-registering the device token on every token change.
+    const fcmRegistered = useRef(false);
+
+    const fetchNotifications = useCallback(async () => {
+        try {
+            const { data } = await notificationApi.list();
+            setNotifications(data.notifications ?? []);
+            /**
+             * The unread count comes from the server. It used to be derived
+             * from `notifications.filter(...)` over the first page only, so
+             * once a user had more than 20 notifications the badge silently
+             * under-counted.
+             */
+            setUnreadCount(data.unreadCount ?? 0);
+        } catch {
+            // Notifications failing is not worth interrupting the user over;
+            // the panel shows its own empty state.
+        }
+    }, []);
 
     useEffect(() => {
-        if (token && !isCheckingAuth) {
-            fetchNotifications();
-            setupFirebase();
-        } else {
+        if (isCheckingAuth) return;
+
+        if (!token) {
             setNotifications([]);
             setUnreadCount(0);
+            fcmRegistered.current = false;
+            return;
         }
-    }, [token, isCheckingAuth]);
 
-    const fetchNotifications = async () => {
-        try {
-            const res = await api.get('/notifications');
-            setNotifications(res.data.notifications);
-            setUnreadCount(res.data.notifications.filter(n => !n.isRead).length);
-        } catch (error) {
-            console.error('Failed to fetch notifications:', error);
+        fetchNotifications();
+
+        /**
+         * Re-register this device's token on every session.
+         *
+         * Silently — `prompt` is not passed, so this only does anything when
+         * the user has already granted permission. FCM tokens rotate (a cleared
+         * site, a reinstalled browser, a token Firebase has retired), and a
+         * rotated token that is never re-sent means the server keeps pushing to
+         * a device that no longer exists.
+         */
+        if (!fcmRegistered.current) {
+            fcmRegistered.current = true;
+            (async () => {
+                try {
+                    const fcmToken = await requestNotificationToken();
+                    if (fcmToken) await notificationApi.registerDeviceToken(fcmToken);
+                } catch {
+                    // Push is an enhancement. A browser that blocks it, or a
+                    // missing service worker, must not break the session.
+                }
+            })();
         }
-    };
+    }, [token, isCheckingAuth, fetchNotifications]);
 
-    const setupFirebase = async () => {
+    /**
+     * Turn push on, from a user gesture.
+     *
+     * Returns the resulting permission so the caller can explain what happened
+     * — "blocked" needs different words from "not now", and a switch that
+     * silently springs back to off tells the user nothing.
+     */
+    const enablePush = useCallback(async () => {
+        const fcmToken = await requestNotificationToken({ prompt: true });
+        const permission = getPushPermission();
+        setPushPermission(permission);
+
+        if (!fcmToken) return permission;
+
         try {
-            const fcmToken = await requestForToken();
-            if (fcmToken) {
-                // Register token with backend
-                await api.post('/notifications/token', { token: fcmToken });
-            }
-
-            // Listen for foreground messages
-            listenForMessages();
-        } catch (error) {
-            console.error('Firebase setup failed:', error);
+            await notificationApi.registerDeviceToken(fcmToken);
+            fcmRegistered.current = true;
+        } catch {
+            return 'error';
         }
-    };
 
-    const listenForMessages = async () => {
-        try {
-            const payload = await onMessageListener();
-            
-            // Show toast
-            toast.custom((t) => (
-                <div className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-md w-full bg-slate-800 shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}>
-                    <div className="flex-1 w-0 p-4">
-                        <div className="flex items-start">
-                            <div className="ml-3 flex-1">
-                                <p className="text-sm font-medium text-white">
-                                    {payload.notification?.title || 'New Notification'}
-                                </p>
-                                <p className="mt-1 text-sm text-slate-300">
-                                    {payload.notification?.body}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            ));
+        return 'granted';
+    }, []);
 
-            // Refetch to get the latest DB notification
+    /**
+     * One toast per notification, whichever channel gets here first.
+     *
+     * An open, connected tab receives every notification twice: once over the
+     * socket (`notification_received`) and once as an FCM foreground message.
+     * They are the same event — the server writes the record, emits it, and
+     * pushes it — so the sender's own device was showing "Transfer Successful"
+     * twice, stacked. Both channels now funnel through here and the second
+     * arrival for an id is dropped.
+     *
+     * The ids are kept for a couple of minutes rather than forever: long enough
+     * that no two deliveries of one notification can straddle the window,
+     * short enough that the set cannot grow for the life of the session.
+     */
+    const shownToasts = useRef(new Map());
+
+    const showNotificationToast = useCallback(({ id, title, message }) => {
+        if (!title && !message) return;
+
+        const now = Date.now();
+        for (const [key, at] of shownToasts.current) {
+            if (now - at > 2 * 60 * 1000) shownToasts.current.delete(key);
+        }
+
+        if (id) {
+            if (shownToasts.current.has(id)) return;
+            shownToasts.current.set(id, now);
+        }
+
+        toast.custom((instance) => (
+            <ToastCard visible={instance.visible} title={title} message={message} />
+        ));
+    }, []);
+
+    /**
+     * Register the foreground handler exactly once, and unsubscribe on unmount.
+     * A previous implementation re-subscribed after every message without
+     * unsubscribing, so handlers accumulated and duplicate toasts multiplied
+     * with each notification received.
+     */
+    useEffect(() => {
+        if (!token) return undefined;
+
+        // Data-only messages: title and body arrive in `data`, and
+        // `onForegroundMessage` hands that straight over.
+        return onForegroundMessage((data) => {
+            showNotificationToast({
+                id: data.notificationId,
+                title: data.title,
+                message: data.body,
+            });
             fetchNotifications();
-            
-            // Re-attach listener
-            listenForMessages();
-        } catch (error) {
-            // Error typically means listener failed or app is shutting down
-            console.error(error);
-        }
-    };
+        });
+    }, [token, fetchNotifications, showNotificationToast]);
 
-    const markAsRead = async (id) => {
-        try {
-            await api.put(`/notifications/${id}/read`);
-            setNotifications(prev => 
-                prev.map(n => n._id === id ? { ...n, isRead: true } : n)
+    const markAsRead = useCallback(
+        async (id) => {
+            // Optimistic, but reconciled from the server on failure so the badge
+            // cannot drift out of sync with the truth.
+            setNotifications((current) =>
+                current.map((item) => (item._id === id ? { ...item, isRead: true } : item))
             );
-            setUnreadCount(prev => Math.max(0, prev - 1));
-        } catch (error) {
-            console.error('Failed to mark as read:', error);
-        }
-    };
+            setUnreadCount((current) => Math.max(0, current - 1));
 
-    const markAllAsRead = async () => {
+            try {
+                await notificationApi.markAsRead(id);
+            } catch {
+                fetchNotifications();
+            }
+        },
+        [fetchNotifications]
+    );
+
+    const markAllAsRead = useCallback(async () => {
+        setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
+        setUnreadCount(0);
+
         try {
-            await api.put('/notifications/read-all');
-            setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-            setUnreadCount(0);
-        } catch (error) {
-            console.error('Failed to mark all as read:', error);
+            await notificationApi.markAllAsRead();
+        } catch {
+            fetchNotifications();
         }
-    };
+    }, [fetchNotifications]);
 
-    return (
-        <NotificationContext.Provider value={{
+    const value = useMemo(
+        () => ({
             notifications,
             unreadCount,
             markAsRead,
             markAllAsRead,
-            refreshNotifications: fetchNotifications
-        }}>
-            {children}
-        </NotificationContext.Provider>
+            refreshNotifications: fetchNotifications,
+            pushPermission,
+            enablePush,
+            showNotificationToast,
+        }),
+        [
+            notifications,
+            unreadCount,
+            markAsRead,
+            markAllAsRead,
+            fetchNotifications,
+            pushPermission,
+            enablePush,
+            showNotificationToast,
+        ]
+    );
+
+    return (
+        <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>
     );
 };

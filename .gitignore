@@ -30,6 +30,10 @@ build/
 Thumbs.db
 
 # Firebase Service Account
-server/config/*firebase*.json
-server/config/*service-account*.json
-server/config/paypro-64e9a-firebase-adminsdk-fbsvc-65d08e5fb2.json
+#
+# Matched in ANY directory, not just server/config/. The credential is normally
+# downloaded to the repo root, which the previous server/config-only patterns
+# did not cover — one `git add .` would have committed a live private key.
+*firebase-adminsdk*.json
+*service-account*.json
+**/*firebase*adminsdk*.json

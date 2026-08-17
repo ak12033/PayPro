@@ -4,11 +4,44 @@ import config from '../config/env.js';
 
 let io = null;
 
+/**
+ * Socket.IO runs its own CORS check, entirely separate from the Express one.
+ *
+ * It used to be handed the raw `CORS_ORIGIN` string while server.js split the
+ * same variable on commas. With more than one allowed origin configured — the
+ * normal case once there is a preview deployment alongside production — the
+ * REST API accepted the browser and the websocket handshake rejected it,
+ * because `"https://a.com,https://b.com"` never equals any single Origin
+ * header. The result was an app that loaded and worked but was silently not
+ * live, which is indistinguishable from a broken realtime implementation.
+ */
+const parseOrigins = () =>
+    (config.CORS_ORIGIN || 'http://localhost:5173')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+
 export const initSocket = (server) => {
     io = new Server(server, {
         cors: {
-            origin: config.CORS_ORIGIN || 'http://localhost:5173',
+            origin: parseOrigins(),
             credentials: true
+        },
+        /**
+         * Replay events a client missed while briefly disconnected.
+         *
+         * A phone switching from wifi to mobile data, or a laptop waking from
+         * sleep, drops the socket for a few seconds. Without recovery the
+         * client reconnects into a fresh session and any `wallet_update` sent
+         * during the gap is gone for good — the balance on screen stays wrong
+         * until something refetches it.
+         *
+         * `skipMiddlewares: false` keeps the JWT check running on the recovered
+         * connection, so a recovery cannot outlive the token that authorised it.
+         */
+        connectionStateRecovery: {
+            maxDisconnectionDuration: 2 * 60 * 1000,
+            skipMiddlewares: false
         }
     });
 

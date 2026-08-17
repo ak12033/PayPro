@@ -1,0 +1,284 @@
+/**
+ * PayPro design tokens.
+ *
+ * Two layers, deliberately:
+ *
+ *   1. A *palette* of raw values (--pp-blue-500). These never appear in a
+ *      component. They exist so the semantic layer has something to point at.
+ *   2. A *semantic* layer (--color-bg, --color-text-muted, --color-positive).
+ *      This is the only layer components are allowed to use.
+ *
+ * The split is what makes light mode possible without touching a single
+ * component: `[data-theme]` re-points the semantic names at different palette
+ * entries and the whole product follows.
+ *
+ * Everything is registered with Tailwind v4's `@theme` so the names are usable
+ * as utilities — `bg-surface`, `text-muted`, `rounded-card`, `shadow-raised`.
+ */
+
+@theme {
+    /* ---------------------------------------------------------------- type */
+
+    /* Inter for UI, tabular-friendly. A single family; weight carries the
+       hierarchy. Two families (Outfit + Poppins) was one family too many, and
+       neither had the tabular figures a ledger needs. */
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+        sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+
+    /* A 1.2-ish modular scale, snapped to whole pixels so text stays crisp.
+       Line heights are set per step: display text needs tighter leading than
+       body text, and a single --leading token can't express that. */
+    --text-2xs: 0.6875rem;      /* 11px — eyebrow / meta */
+    --text-2xs--line-height: 1rem;
+    --text-2xs--letter-spacing: 0.04em;
+    --text-xs: 0.75rem;         /* 12px — captions, badges */
+    --text-xs--line-height: 1.125rem;
+    --text-sm: 0.875rem;        /* 14px — secondary body */
+    --text-sm--line-height: 1.375rem;
+    --text-base: 1rem;          /* 16px — body */
+    --text-base--line-height: 1.5rem;
+    --text-lg: 1.125rem;        /* 18px — card titles */
+    --text-lg--line-height: 1.625rem;
+    --text-xl: 1.375rem;        /* 22px — section titles */
+    --text-xl--line-height: 1.75rem;
+    --text-2xl: 1.75rem;        /* 28px — page titles */
+    --text-2xl--line-height: 2.125rem;
+    --text-2xl--letter-spacing: -0.015em;
+    --text-3xl: 2.25rem;        /* 36px — balance */
+    --text-3xl--line-height: 2.5rem;
+    --text-3xl--letter-spacing: -0.02em;
+    --text-4xl: 3rem;           /* 48px — hero balance */
+    --text-4xl--line-height: 3.25rem;
+    --text-4xl--letter-spacing: -0.025em;
+
+    /* -------------------------------------------------------------- radius */
+
+    /* Named by role, not by size. A component asks for `rounded-card`, so
+       changing the product's roundness is one edit here rather than a
+       find-and-replace across sixty files. */
+    --radius-control: 0.625rem;  /* 10px — buttons, inputs, chips */
+    --radius-card: 1rem;         /* 16px — cards, list rows */
+    --radius-panel: 1.25rem;     /* 20px — page-level panels, sheets */
+    --radius-pill: 999px;
+
+    /* ----------------------------------------------------------- elevation */
+
+    /* Three levels only. The old UI had six different hand-written shadows,
+       which meant nothing was ever reliably "above" anything else. */
+    --shadow-flat: 0 0 0 1px var(--color-border);
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 12px rgb(0 0 0 / 0.06);
+    --shadow-overlay: 0 8px 16px rgb(0 0 0 / 0.08), 0 24px 48px rgb(0 0 0 / 0.14);
+
+    /* -------------------------------------------------------------- motion */
+
+    /* Durations are short on purpose. Money movement should feel instant;
+       animation here exists to explain what changed, not to entertain. */
+    --duration-instant: 80ms;
+    --duration-fast: 140ms;
+    --duration-normal: 220ms;
+    --duration-slow: 380ms;
+
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);      /* entrances */
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);  /* moves */
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* confirmations only */
+
+    /* ------------------------------------------------------------- palette */
+
+    /* Raw ramps. Not for direct use — see the semantic layer below. */
+    --pp-slate-25: #fbfcfd;
+    --pp-slate-50: #f6f8fa;
+    --pp-slate-100: #eceff3;
+    --pp-slate-200: #dde2e9;
+    --pp-slate-300: #c3ccd6;
+    --pp-slate-400: #8e9baa;
+    --pp-slate-500: #64748b;
+    --pp-slate-600: #4a5768;
+    --pp-slate-700: #333e4d;
+    --pp-slate-800: #1e2732;
+    --pp-slate-900: #141b24;
+    --pp-slate-950: #0b1017;
+
+    --pp-blue-100: #dbeafe;
+    --pp-blue-300: #93c5fd;
+    --pp-blue-400: #60a5fa;
+    --pp-blue-500: #3b82f6;
+    --pp-blue-600: #2563eb;
+    --pp-blue-700: #1d4ed8;
+
+    --pp-green-100: #d7f5e3;
+    --pp-green-400: #34d399;
+    --pp-green-500: #10b981;
+    --pp-green-600: #059669;
+    --pp-green-700: #047857;
+
+    --pp-red-100: #fee2e2;
+    --pp-red-400: #f87171;
+    --pp-red-500: #ef4444;
+    --pp-red-600: #dc2626;
+    --pp-red-700: #b91c1c;
+
+    --pp-amber-100: #fef3c7;
+    --pp-amber-400: #fbbf24;
+    --pp-amber-500: #f59e0b;
+    --pp-amber-600: #d97706;
+    --pp-amber-700: #b45309;
+
+    --pp-violet-400: #a78bfa;
+    --pp-violet-500: #8b5cf6;
+    --pp-violet-600: #7c3aed;
+}
+
+/**
+ * Semantic tokens — light mode (the default).
+ *
+ * Light is the default rather than dark because this is a product about money:
+ * receipts, statements and ledgers are read far more often than they are
+ * admired, and long lists of numbers are measurably easier to scan on a light
+ * surface. Dark mode is a first-class equal, not an afterthought — but it is
+ * a preference, not the house style.
+ */
+:root,
+:root[data-theme='light'] {
+    color-scheme: light;
+
+    /* Backgrounds, from furthest back to closest to the user. */
+    --color-canvas: var(--pp-slate-50);   /* the page itself */
+    --color-surface: #ffffff;             /* cards sitting on the canvas */
+    --color-surface-sunken: var(--pp-slate-50);  /* wells inside a card */
+    --color-surface-hover: var(--pp-slate-50);
+    --color-surface-active: var(--pp-slate-100);
+    --color-overlay: #ffffff;             /* sheets, dialogs, menus */
+    --color-scrim: rgb(15 23 42 / 0.32);  /* behind an overlay */
+
+    --color-border: var(--pp-slate-200);
+    --color-border-strong: var(--pp-slate-300);
+
+    /* Text. Four steps is enough; a fifth always ends up misused. */
+    --color-text: var(--pp-slate-900);       /* primary content */
+    --color-text-secondary: var(--pp-slate-600); /* supporting content */
+    --color-text-muted: var(--pp-slate-500);     /* metadata, timestamps */
+    --color-text-inverse: #ffffff;
+
+    /* Brand / primary action. */
+    --color-accent: var(--pp-blue-600);
+    --color-accent-hover: var(--pp-blue-700);
+    --color-accent-soft: var(--pp-blue-100);
+    --color-accent-text: var(--pp-blue-700);
+    --color-on-accent: #ffffff;
+
+    /* Money direction. Deliberately NOT called green/red: the whole point is
+       that a component says "positive" and the theme decides how that looks. */
+    --color-positive: var(--pp-green-700);
+    --color-positive-soft: var(--pp-green-100);
+    --color-negative: var(--pp-red-700);
+    --color-negative-soft: var(--pp-red-100);
+
+    /* Status. */
+    --color-warning: var(--pp-amber-700);
+    --color-warning-soft: var(--pp-amber-100);
+    --color-danger: var(--pp-red-600);
+    --color-danger-soft: var(--pp-red-100);
+    --color-success: var(--pp-green-600);
+    --color-success-soft: var(--pp-green-100);
+    --color-info: var(--pp-blue-600);
+    --color-info-soft: var(--pp-blue-100);
+
+    /* AI surfaces get their own token so AI content is *visibly* AI content —
+       a trust requirement, not a decorative one. */
+    --color-ai: var(--pp-violet-600);
+    --color-ai-soft: #ede9fe;
+
+    --color-focus: var(--pp-blue-600);
+}
+
+:root[data-theme='dark'] {
+    color-scheme: dark;
+
+    --color-canvas: var(--pp-slate-950);
+    --color-surface: #121923;
+    --color-surface-sunken: #0e141d;
+    --color-surface-hover: #18212d;
+    --color-surface-active: #1e2836;
+    --color-overlay: #18212d;
+    --color-scrim: rgb(0 0 0 / 0.6);
+
+    --color-border: #232e3c;
+    --color-border-strong: #33404f;
+
+    --color-text: #f1f5f9;
+    --color-text-secondary: #a8b4c2;
+    --color-text-muted: #7c8896;
+    --color-text-inverse: var(--pp-slate-950);
+
+    --color-accent: var(--pp-blue-500);
+    --color-accent-hover: var(--pp-blue-400);
+    --color-accent-soft: rgb(59 130 246 / 0.16);
+    --color-accent-text: var(--pp-blue-300);
+    --color-on-accent: #ffffff;
+
+    /* Lighter ramp entries on dark: the 700s used in light mode fail contrast
+       against a dark surface, which would make every debit amount unreadable. */
+    --color-positive: var(--pp-green-400);
+    --color-positive-soft: rgb(16 185 129 / 0.16);
+    --color-negative: var(--pp-red-400);
+    --color-negative-soft: rgb(239 68 68 / 0.16);
+
+    --color-warning: var(--pp-amber-400);
+    --color-warning-soft: rgb(245 158 11 / 0.16);
+    --color-danger: var(--pp-red-400);
+    --color-danger-soft: rgb(239 68 68 / 0.16);
+    --color-success: var(--pp-green-400);
+    --color-success-soft: rgb(16 185 129 / 0.16);
+    --color-info: var(--pp-blue-400);
+    --color-info-soft: rgb(59 130 246 / 0.16);
+
+    --color-ai: var(--pp-violet-400);
+    --color-ai-soft: rgb(139 92 246 / 0.18);
+
+    --color-focus: var(--pp-blue-400);
+
+    /* Shadows do almost nothing on a dark canvas; borders carry elevation
+       instead, so the shadows are re-tuned rather than left as light-mode
+       leftovers that render as invisible smudges. */
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px rgb(0 0 0 / 0.3);
+    --shadow-overlay: 0 8px 16px rgb(0 0 0 / 0.45), 0 24px 48px rgb(0 0 0 / 0.55);
+}
+
+/* Register the semantic names as Tailwind colours so `bg-surface`,
+   `text-muted`, `border-border` etc. exist as utilities. */
+@theme inline {
+    --color-canvas: var(--color-canvas);
+    --color-surface: var(--color-surface);
+    --color-surface-sunken: var(--color-surface-sunken);
+    --color-surface-hover: var(--color-surface-hover);
+    --color-surface-active: var(--color-surface-active);
+    --color-overlay: var(--color-overlay);
+    --color-scrim: var(--color-scrim);
+    --color-border: var(--color-border);
+    --color-border-strong: var(--color-border-strong);
+    --color-text: var(--color-text);
+    --color-text-secondary: var(--color-text-secondary);
+    --color-text-muted: var(--color-text-muted);
+    --color-text-inverse: var(--color-text-inverse);
+    --color-accent: var(--color-accent);
+    --color-accent-hover: var(--color-accent-hover);
+    --color-accent-soft: var(--color-accent-soft);
+    --color-accent-text: var(--color-accent-text);
+    --color-on-accent: var(--color-on-accent);
+    --color-positive: var(--color-positive);
+    --color-positive-soft: var(--color-positive-soft);
+    --color-negative: var(--color-negative);
+    --color-negative-soft: var(--color-negative-soft);
+    --color-warning: var(--color-warning);
+    --color-warning-soft: var(--color-warning-soft);
+    --color-danger: var(--color-danger);
+    --color-danger-soft: var(--color-danger-soft);
+    --color-success: var(--color-success);
+    --color-success-soft: var(--color-success-soft);
+    --color-info: var(--color-info);
+    --color-info-soft: var(--color-info-soft);
+    --color-ai: var(--color-ai);
+    --color-ai-soft: var(--color-ai-soft);
+    --color-focus: var(--color-focus);
+}

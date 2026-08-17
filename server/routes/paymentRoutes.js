@@ -1,13 +1,22 @@
 import express from 'express';
 import authMiddleware from '../middlewares/authMiddleware.js';
 import { createOrder, verifyPayment, handleWebhook, refundPayment, getPaymentHistory } from '../controllers/paymentController.js';
+import { paymentLimiter } from '../middlewares/rateLimiters.js';
 
 const paymentRouter = express.Router();
 
-paymentRouter.post('/create-order', authMiddleware, createOrder);
-paymentRouter.post('/verify', authMiddleware, verifyPayment);
+paymentRouter.post('/create-order', authMiddleware, paymentLimiter, createOrder);
+paymentRouter.post('/verify', authMiddleware, paymentLimiter, verifyPayment);
 paymentRouter.get('/history', authMiddleware, getPaymentHistory);
-paymentRouter.post('/webhook', handleWebhook); // Webhook shouldn't have authMiddleware, razorpay sends this
-paymentRouter.post('/refund', authMiddleware, refundPayment);
+paymentRouter.post('/refund', authMiddleware, paymentLimiter, refundPayment);
+
+/**
+ * The webhook is intentionally unauthenticated — Razorpay calls it. It is
+ * authenticated instead by an HMAC signature over the raw request body.
+ *
+ * NOTE: the raw-body parser for this exact path is mounted in server.js
+ * *before* express.json(), because verification needs the bytes as sent.
+ */
+paymentRouter.post('/webhook', handleWebhook);
 
 export default paymentRouter;
