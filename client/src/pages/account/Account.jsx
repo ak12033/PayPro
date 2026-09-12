@@ -6,6 +6,7 @@ import PageHeader, { SectionHeading } from '../../components/layout/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Avatar from '../../components/ui/Avatar';
+import IconBadge from '../../components/ui/IconBadge';
 import Switch from '../../components/ui/Switch';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import { ConfirmSheet } from '../../components/ui/Sheet';
@@ -151,12 +152,7 @@ const Account = () => {
                     <Link to={ROUTES.SECURITY} className="block">
                         <Card padding="md" className="transition-colors hover:bg-surface-hover">
                             <div className="flex items-center gap-3">
-                                <span
-                                    aria-hidden="true"
-                                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-positive-soft text-positive"
-                                >
-                                    <ShieldCheck size={17} />
-                                </span>
+                                <IconBadge icon={<ShieldCheck size={17} />} tone="positive" />
                                 <div className="min-w-0 flex-1">
                                     <p className="text-sm font-medium text-text">Security centre</p>
                                     <p className="text-xs text-text-muted">

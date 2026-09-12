@@ -25,13 +25,24 @@ services:
       retries: 20
       start_period: 10s
 
+  # Called directly by the browser for the assistant and insights, and
+  # server-to-server by `api` for transaction scoring. It reads and writes the
+  # same Mongo database `api` uses, and verifies the same access tokens — hence
+  # the shared MONGO_URI and JWT_SECRET.
   ai:
     build:
       context: ./fastapi-server
+    depends_on:
+      mongo:
+        condition: service_healthy
     environment:
       ENVIRONMENT: development
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       FASTAPI_API_KEY: ${FASTAPI_API_KEY:-local-dev-shared-secret}
+      MONGO_URI: mongodb://mongo:27017/?replicaSet=rs0&directConnection=true
+      MONGO_DB_NAME: PayPro
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-at-least-32-characters-long}
+      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:8080
     ports:
       - "8000:8000"
 
@@ -56,7 +67,6 @@ services:
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       EMAIL_USER: ${EMAIL_USER:-}
       EMAIL_PASS: ${EMAIL_PASS:-}
       ENABLE_CRON: "true"
@@ -68,6 +78,7 @@ services:
       context: ./client
       args:
         VITE_BACKEND_URL: http://localhost:5000
+        VITE_FASTAPI_URL: http://localhost:8000
         VITE_RAZORPAY_KEY_ID: ${VITE_RAZORPAY_KEY_ID:-}
         VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
         VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-}

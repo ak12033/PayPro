@@ -4,14 +4,13 @@ import {
     getPaginatedTransactions,
     getTransactions,
     getTransactionSummary,
+    getRecentRecipients,
     sendMoney,
-    getAiInsights,
-    askAiAssistant,
     exportTransactionsCsv
 } from '../controllers/transactionController.js';
 import authMiddleware from '../middlewares/authMiddleware.js';
 import { resendTransferOtp, verifyTransferOtp } from '../controllers/otpController.js';
-import { transferLimiter, otpVerifyLimiter, otpSendLimiter, aiLimiter } from '../middlewares/rateLimiters.js';
+import { transferLimiter, otpVerifyLimiter, otpSendLimiter } from '../middlewares/rateLimiters.js';
 
 const transactionRouter = express.Router();
 
@@ -33,7 +32,6 @@ transactionRouter.post('/verify-otp', authMiddleware, otpVerifyLimiter, verifyTr
 transactionRouter.post('/resend-otp', authMiddleware, otpSendLimiter, resendTransferOtp);
 
 transactionRouter.get('/recent', authMiddleware, getTransactions);
-transactionRouter.get('/insights', authMiddleware, aiLimiter, getAiInsights);
-transactionRouter.post('/assistant', authMiddleware, aiLimiter, askAiAssistant);
+transactionRouter.get('/recent-recipients', authMiddleware, getRecentRecipients);
 
 export default transactionRouter;

@@ -4,6 +4,7 @@ import { CheckCircle2, ShieldCheck } from 'lucide-react';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Amount from '../../components/ui/Amount';
+import IconBadge from '../../components/ui/IconBadge';
 import OtpField from '../../components/forms/OtpField';
 import { useAuth } from '../../context/AuthContext';
 import { transactionApi } from '../../services/api/endpoints/transactionApi';
@@ -108,12 +109,13 @@ const TransferVerify = () => {
         return (
             <Screen>
                 <div className="text-center">
-                    <span
-                        aria-hidden="true"
-                        className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-positive-soft text-positive animate-pop"
-                    >
-                        <CheckCircle2 size={32} />
-                    </span>
+                    <IconBadge
+                        icon={<CheckCircle2 size={32} />}
+                        tone="positive"
+                        size="xl"
+                        pulse
+                        className="mx-auto"
+                    />
 
                     <div role="status">
                         <h1 className="mt-4 text-xl font-semibold text-text">Transfer complete</h1>
@@ -140,12 +142,7 @@ const TransferVerify = () => {
     return (
         <Screen>
             <div className="text-center">
-                <span
-                    aria-hidden="true"
-                    className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-accent-soft text-accent-text"
-                >
-                    <ShieldCheck size={22} />
-                </span>
+                <IconBadge icon={<ShieldCheck size={22} />} tone="accent" size="lg" className="mx-auto" />
                 <h1 className="mt-3 text-xl font-semibold text-text">Confirm this transfer</h1>
                 <p className="mt-1 text-sm text-text-muted">
                     We sent a 6-digit code to {maskEmail(state?.email) || 'your email'}.

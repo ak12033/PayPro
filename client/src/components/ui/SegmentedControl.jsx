@@ -69,8 +69,13 @@ const SegmentedControl = ({
                             'shrink-0 rounded-[calc(var(--radius-control)-2px)] px-3 font-medium',
                             'transition-colors duration-[--duration-fast] ease-[--ease-out]',
                             height,
+                            // The raised surface is what marks the selection;
+                            // the accent text is what ties it to the rest of
+                            // the product. Both, rather than colour alone —
+                            // `aria-selected` and the elevation still carry it
+                            // for anyone who cannot see the hue.
                             selected
-                                ? 'bg-surface text-text shadow-raised'
+                                ? 'bg-surface text-accent-text shadow-raised'
                                 : 'text-text-muted hover:text-text'
                         )}
                     >

@@ -1,5 +1,34 @@
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-google-genai>=0.8.0
-pydantic>=2.9.0
-python-dotenv>=1.0.1
+# ─────────────────────────────────────────────────────────────
+# PayPro AI service — runtime dependencies
+#
+# Pinned so `pip install -r requirements.txt` resolves identically on every
+# machine and inside the Docker image. Only direct dependencies are listed;
+# their transitive deps are resolved by pip.
+#
+# Install:  .venv/Scripts/python -m pip install -r requirements.txt   (Windows)
+#           .venv/bin/python -m pip install -r requirements.txt       (Linux/macOS)
+# ─────────────────────────────────────────────────────────────
+
+# Web framework + ASGI server. [standard] pulls in uvloop/httptools/watchfiles,
+# which provide the --reload used in development.
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+
+# Request/response validation for every route in app/schemas/ai.py, and the
+# response_schema passed to Gemini.
+pydantic==2.13.4
+
+# Gemini client used by app/services/gemini.py.
+google-genai==2.19.0
+
+# Loads .env in app/config.py.
+python-dotenv==1.2.3
+
+# Direct access to the application's existing MongoDB, using the driver's async
+# API (AsyncMongoClient). The browser calls this service directly now, so it
+# reads and writes the shared database itself instead of via the Node backend.
+pymongo==4.18.1
+
+# Verifies the access tokens the Node backend signs, so this service can
+# authenticate the SPA locally without calling back into Node.
+PyJWT==2.14.0

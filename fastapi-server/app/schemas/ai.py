@@ -1,7 +1,10 @@
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Literal
+from typing import Literal
 
-# (The unused `PromptRequest` model was removed — nothing imported or served it.)
+from pydantic import BaseModel, Field, field_validator
+
+# Request models exist only for the two server-to-server endpoints. The
+# browser-facing routes read the user's data from the database themselves, so
+# they take no transaction payload from the client at all.
 
 
 # Categorization
@@ -23,14 +26,14 @@ class TransactionData(BaseModel):
     description: str = Field(max_length=500)
     amount: float
     type: str = Field(max_length=20)
-    category: Optional[str] = Field(default=None, max_length=60)
+    category: str | None = Field(default=None, max_length=60)
 
 
 class FraudCheckRequest(BaseModel):
     new_transaction: TransactionData
     # Capped: the Node client sends 10, but nothing stopped a much larger list
     # from inflating the prompt.
-    history: List[TransactionData] = Field(default_factory=list, max_length=50)
+    history: list[TransactionData] = Field(default_factory=list, max_length=50)
 
 
 class FraudCheckResponse(BaseModel):
@@ -49,21 +52,7 @@ class FraudCheckResponse(BaseModel):
         return value
 
 
-# AI Assistant
-class AssistantRequest(BaseModel):
-    query: str = Field(min_length=1, max_length=2000)
-    transactions: List[dict] = Field(default_factory=list, max_length=100, description="Recent user transactions context")
-
-
-class AssistantResponse(BaseModel):
-    response: str = Field(description="The assistant's conversational response")
-
-
 # AI Insights
-class InsightsRequest(BaseModel):
-    transactions: List[dict] = Field(default_factory=list, max_length=200, description="User transactions to analyze")
-
-
 class InsightItem(BaseModel):
     title: str = Field(description="A short title for the insight")
     description: str = Field(description="Detailed explanation or recommendation")
@@ -71,4 +60,4 @@ class InsightItem(BaseModel):
 
 
 class InsightsResponse(BaseModel):
-    insights: List[InsightItem] = Field(description="List of structured insights")
+    insights: list[InsightItem] = Field(description="List of structured insights")

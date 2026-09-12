@@ -6,6 +6,7 @@ import Card from '../../components/ui/Card';
 import Button, { IconButton } from '../../components/ui/Button';
 import Skeleton from '../../components/ui/Skeleton';
 import Amount from '../../components/ui/Amount';
+import { usePointerTilt } from '../../hooks/usePointerTilt';
 import { ROUTES } from '../../constants/routes';
 
 const STORAGE_KEY = 'paypro-balance-hidden';
@@ -35,6 +36,7 @@ const STORAGE_KEY = 'paypro-balance-hidden';
  */
 const BalanceCard = ({ balance, loading = false }) => {
     const navigate = useNavigate();
+    const { ref: tiltRef } = usePointerTilt();
     const [hidden, setHidden] = useState(() => {
         try {
             return localStorage.getItem(STORAGE_KEY) === 'true';
@@ -72,7 +74,21 @@ const BalanceCard = ({ balance, loading = false }) => {
     };
 
     return (
-        <Card variant="raised" className="overflow-hidden">
+        <Card
+            ref={tiltRef}
+            variant="glass"
+            className="relative overflow-hidden transition-transform duration-[--duration-fast] ease-[--ease-in-out]"
+        >
+            {/* Brand hairline — the one place the gradient marks a surface as
+                "the" primary figure on the screen, rather than merely elevated.
+                The inner div sweeps a soft highlight across it every few
+                seconds — a premium detail distinct from `.skeleton`'s loading
+                shimmer, confined to this 3px strip rather than the whole card
+                so it never reads as "this card is still loading". */}
+            <div className="absolute inset-x-0 top-0 h-[3px] overflow-hidden bg-gradient-brand">
+                <div className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer-sweep" />
+            </div>
+
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <p className="text-sm text-text-muted">Available balance</p>

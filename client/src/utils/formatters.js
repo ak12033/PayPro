@@ -134,6 +134,23 @@ export const formatDayLabel = (value) => {
     });
 };
 
+/**
+ * Converts a `DATE_RANGES` preset key into an ISO `startDate` for the API.
+ *
+ * `null` for `'All'` (or anything unrecognised) rather than a token the
+ * server has to special-case — "no start date" already means "no lower
+ * bound" to `/transactions/history`.
+ */
+export const getRangeStartDate = (range) => {
+    if (!range || range === 'All') return null;
+    if (range === 'Today') {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    }
+    const days = { '7d': 7, '30d': 30, '90d': 90 }[range];
+    return days ? new Date(Date.now() - days * 86_400_000).toISOString() : null;
+};
+
 /** Groups a chronological list into `[{ key, label, items }]` by calendar day. */
 export const groupByDay = (items, getDate = (item) => item.createdAt) => {
     const buckets = new Map();

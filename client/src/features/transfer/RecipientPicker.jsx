@@ -2,13 +2,95 @@ import React, { useState } from 'react';
 import { Search, UserX } from 'lucide-react';
 import Avatar from '../../components/ui/Avatar';
 import { Input } from '../../components/ui/Field';
-import { SkeletonRows } from '../../components/ui/Skeleton';
+import Skeleton, { SkeletonRows } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/feedback/EmptyState';
 import ErrorState from '../../components/feedback/ErrorState';
 import useQuery from '../../hooks/useQuery';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
 import { userApi } from '../../services/api/endpoints/userApi';
+import { transactionApi } from '../../services/api/endpoints/transactionApi';
 import cn from '../../lib/cn';
+
+/**
+ * "Send again" shortcuts.
+ *
+ * A horizontal strip of the last few people paid, above the search box, so the
+ * common case — paying someone you already pay — is one tap instead of typing
+ * a name you have typed before.
+ *
+ * It hides itself while a search is active: once the user is searching, the
+ * shortcuts are answering a question they have moved on from, and leaving them
+ * on screen pushes the actual results below the fold on a phone.
+ *
+ * A failure here is silent by design. This is a convenience layer over a
+ * search box that still works perfectly without it, so an error state would be
+ * alarming the user about something that has not blocked them.
+ */
+const RecentRecipients = ({ value, onChange }) => {
+    const { data, loading, error } = useQuery(
+        async () => (await transactionApi.getRecentRecipients()).data,
+        { deps: [] }
+    );
+
+    const recipients = data?.recipients ?? [];
+
+    if (loading) {
+        return (
+            <div className="mb-3 flex gap-3" aria-hidden="true">
+                {/* Sized to match the real row exactly — `Avatar size="md"` is
+                    h-10 w-10 — so resolving the fetch swaps content in without
+                    nudging the search box below it. */}
+                {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex w-[4.5rem] flex-col items-center gap-1.5 px-1 py-2">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <Skeleton className="h-2.5 w-12" />
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if (error || recipients.length === 0) return null;
+
+    return (
+        <div className="mb-4">
+            <p id="recent-recipients-label" className="mb-2 text-2xs uppercase text-text-muted">
+                Send again
+            </p>
+            {/* Horizontally scrollable so four-plus shortcuts never wrap into a
+                second row that pushes the search box off a small screen. */}
+            <ul
+                aria-labelledby="recent-recipients-label"
+                className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1"
+            >
+                {recipients.map((user) => {
+                    const name = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
+                    const selected = value?._id === user._id;
+
+                    return (
+                        <li key={user._id}>
+                            <button
+                                type="button"
+                                aria-pressed={selected}
+                                onClick={() => onChange(user)}
+                                className={cn(
+                                    'flex w-[4.5rem] flex-col items-center gap-1.5 rounded-card px-1 py-2',
+                                    'transition-colors duration-[--duration-fast]',
+                                    selected ? 'bg-accent-soft' : 'hover:bg-surface-hover'
+                                )}
+                            >
+                                <Avatar name={name} size="md" />
+                                <span className="w-full truncate text-center text-2xs text-text-secondary">
+                                    {user.firstName || 'User'}
+                                </span>
+                            </button>
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
+};
 
 /**
  * Choosing who to pay.
@@ -43,6 +125,14 @@ const RecipientPicker = ({ value, onChange }) => {
 
     return (
         <div>
+            {/* Keyed off the raw input rather than `hasQuery`'s debounced
+                value, so the strip disappears on the first keystroke instead
+                of a beat later — which would shift the results list down at
+                the exact moment they arrive. */}
+            {search.trim().length === 0 && (
+                <RecentRecipients value={value} onChange={onChange} />
+            )}
+
             <div className="relative">
                 <Search
                     size={16}

@@ -56,9 +56,17 @@ export const ThemeProvider = ({ children }) => {
 
         // Keeps the mobile browser chrome in step with the app surface;
         // without it the status bar stays white above a dark app.
+        //
+        // Read back off the canvas token rather than restated as a literal.
+        // The attribute is set immediately above, so the computed value is
+        // already the new theme's. Both literals that used to live here had
+        // drifted from the ramp they were copied from.
         const meta = document.querySelector('meta[name="theme-color"]');
         if (meta) {
-            meta.setAttribute('content', resolved === 'dark' ? '#0b1017' : '#f6f8fa');
+            const canvas = getComputedStyle(document.documentElement)
+                .getPropertyValue('--color-canvas')
+                .trim();
+            if (canvas) meta.setAttribute('content', canvas);
         }
     }, [resolved]);
 

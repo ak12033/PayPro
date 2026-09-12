@@ -8,23 +8,34 @@ const notifyAuthExpired = () => {
 };
 
 /**
+ * Refresh state, shared by every client this is attached to.
+ *
+ * It is module-level rather than per-instance because there is now more than
+ * one instance: the Node backend and the AI service are separate origins with
+ * separate axios clients, but one session behind them. Per-instance state let
+ * a 401 on each fire its own refresh, and the server rotates refresh tokens —
+ * the second request presents an already-consumed token, gets a 401 back, and
+ * signs the user out mid-session. One queue means one refresh, whichever client
+ * noticed first, with the rest retrying on the token it produced.
+ */
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+    failedQueue.forEach(({ resolve, reject }) => {
+        if (error) reject(error);
+        else resolve(token);
+    });
+    failedQueue = [];
+};
+
+/**
  * Attaches the bearer token and the silent-refresh retry cycle to a client.
  *
  * Written as a function over an instance rather than as top-level side effects
  * so the behaviour is testable and the client module has no auth dependency.
  */
 export const attachAuthInterceptors = (client) => {
-    let isRefreshing = false;
-    let failedQueue = [];
-
-    const processQueue = (error, token = null) => {
-        failedQueue.forEach(({ resolve, reject }) => {
-            if (error) reject(error);
-            else resolve(token);
-        });
-        failedQueue = [];
-    };
-
     client.interceptors.request.use(
         (config) => {
             const token = getAccessToken();

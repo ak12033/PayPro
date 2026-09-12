@@ -1,6 +1,14 @@
 # 💸 PayPro — AI-Powered MERN & FastAPI Payment System
 
-PayPro is a highly secure, AI-enhanced **Peer-to-Peer (P2P) Payment and Wallet Application**. Built on a modern full-stack architecture, it integrates a React client, a Node.js/Express core server, and a FastAPI Python AI microservice.
+PayPro is a highly secure, AI-enhanced **Peer-to-Peer (P2P) Payment and Wallet Application**. Built on a modern full-stack architecture, it integrates a React client, a Node.js/Express core server, and a FastAPI Python AI service.
+
+The two backends are **independent**: the client calls Express for money, auth and account operations, and calls the FastAPI service directly for AI features. Both read the same MongoDB database and verify the same access tokens.
+
+```
+                    ┌──▶ Express  ──▶ MongoDB / Razorpay / FCM
+React ──────────────┤
+                    └──▶ FastAPI  ──▶ MongoDB / Google Gemini
+```
 
 PayPro features location-aware security checks (triggering 2FA email OTPs upon login location changes), rate-limiting P2P transaction controls, direct wallet top-ups and refunds via Razorpay, real-time push alerts via Firebase Cloud Messaging, and automatic AI-powered transaction categorization, fraud evaluation, and dynamic insights using Google Gemini.
 
@@ -25,9 +33,11 @@ PayPro features location-aware security checks (triggering 2FA email OTPs upon l
 *   **Gateway Integrations:** Razorpay Node SDK (order creation, signature checks, webhooks, refunds)
 *   **Notification Engine:** Firebase Admin SDK (multicast background push)
 
-### AI Microservice (`/fastapi-server`)
-*   **Language & Framework:** Python 3.10+ & FastAPI (Uvicorn)
+### AI Service (`/fastapi-server`)
+*   **Language & Framework:** Python 3.12 & FastAPI (Uvicorn), isolated in a project-local `.venv`
 *   **AI Engine SDK:** `google-genai` integration utilizing **`gemini-2.5-flash`**
+*   **Database:** `pymongo` (`AsyncMongoClient`) against the *same* MongoDB the Express server uses
+*   **Authentication:** `PyJWT` — verifies the access tokens Express signs, so the browser can call it directly
 *   **Schemas & Validation:** Pydantic models for strict structure validation
 
 ---
@@ -54,8 +64,10 @@ PayPro features location-aware security checks (triggering 2FA email OTPs upon l
 ### 🧠 4. AI-Powered Enhancements (FastAPI & Gemini)
 *   **AI Transaction Categorization:** Sends transaction details to the FastAPI service. Gemini analyzes descriptions and maps them into 19 financial categories, returning an appropriate Lucide vector icon.
 *   **AI Fraud Check Engine:** Gathers the transaction details along with the user's last 10 historical transactions. Gemini computes a dynamic `risk_score` (0-100), tags the `risk_level` (`low`, `medium`, `high`), and provides a natural reason description.
-*   **AI Financial Assistant:** Slide-out chatbot (`AIAssistantPanel.jsx`) built directly into the client. Feeds user transaction logs to Gemini to provide personalized answers (e.g. *"What was my biggest expense this month?"*).
-*   **AI Financial Insights:** Generates structured spending reports, budget suggestions, and anomalous trend cards.
+*   **AI Financial Assistant:** A sheet opened from the Insights page. The browser calls the FastAPI service directly; that service tool-calls into MongoDB for balances, transactions, analytics, notifications and profile, and persists the conversation.
+*   **AI Financial Insights:** Generates structured spending reports, budget suggestions, and anomalous trend cards from the user's last 50 transactions, read by the FastAPI service itself.
+
+> **Where each AI call goes.** Categorization and fraud checking run *inside* the ledger's write path, so Express calls the FastAPI service server-to-server with a shared `X-API-Key`. The assistant and insights are user-initiated, so the browser calls the FastAPI service directly with its normal access token. Express is not a proxy for either.
 
 ### 🔔 5. FCM Multicast Push Notifications
 *   **Push Registration:** Registers and associates client device FCM tokens to user accounts.
@@ -86,8 +98,9 @@ EMAIL_USER=your_gmail_address
 EMAIL_PASS=your_gmail_app_password
 IPAPI_URL=https://ipapi.co
 CORS_ORIGIN=http://localhost:5173
+# The AI service, called server-to-server for categorization and fraud scoring.
 FASTAPI_URL=http://localhost:8000
-GEMINI_API_KEY=your_gemini_api_key
+FASTAPI_API_KEY=your_shared_secret
 RAZORPAY_KEY_ID=your_razorpay_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
@@ -98,6 +111,8 @@ FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"...","private_k
 Create a `.env` file under the `client` directory:
 ```env
 VITE_BACKEND_URL=http://localhost:5000
+# The AI service. The browser calls it directly for the assistant and insights.
+VITE_FASTAPI_URL=http://localhost:8000
 VITE_RAZORPAY_KEY_ID=your_razorpay_key_id
 
 # Firebase Client Configuration
@@ -111,10 +126,24 @@ VITE_FIREBASE_VAPID_KEY=your_firebase_vapid_key
 ```
 
 ### 3. FastAPI Server (`/fastapi-server/.env`)
-Create a `.env` file under the `fastapi-server` directory:
+Copy `fastapi-server/.env.example` to `fastapi-server/.env` and fill it in:
 ```env
+ENVIRONMENT=development
 GEMINI_API_KEY=your_gemini_api_key
+# The SAME database the Express server uses — same data, no copy.
+MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net
+MONGO_DB_NAME=PayPro
+# Must be byte-identical to JWT_SECRET in server/.env: this service verifies
+# the very same access tokens the Express server signs.
+JWT_SECRET=your_jwt_secret
+# Comma-separated browser origins allowed to call this service directly.
+# Required in production.
+ALLOWED_ORIGINS=http://localhost:5173
+# Shared secret with the Express backend — must match FASTAPI_API_KEY there.
+# Guards the two server-to-server scoring endpoints. Required in production.
+FASTAPI_API_KEY=your_shared_secret
 ```
+See [`fastapi-server/README.md`](fastapi-server/README.md) for the full variable reference.
 
 ---
 
@@ -131,22 +160,23 @@ npm install
 cd ../server
 npm install
 
-# FastAPI AI Microservice (Python virtual environment recommended)
+# FastAPI AI Microservice (Python 3.12, isolated in a project-local .venv)
 cd ../fastapi-server
-python -m venv venv
-venv\Scripts\activate   # On Windows (use source venv/bin/activate on Mac/Linux)
-pip install -r requirements.txt
+python -m venv .venv
+.venv\Scripts\activate            # On Windows (use source .venv/bin/activate on Mac/Linux)
+pip install -r requirements-dev.txt   # or requirements.txt for runtime only
 ```
-*(Ensure a `requirements.txt` containing `fastapi`, `uvicorn`, `google-genai`, `pydantic`, `python-dotenv` is present)*
+*Dependencies are pinned in `requirements.txt` (production) and `requirements-dev.txt` (adds pytest, httpx and ruff). `.venv/` is git-ignored — never commit it.*
 
 ### Step 2: Running the Services
 
 1.  **FastAPI AI Server:** Start the Python service:
     ```bash
     cd fastapi-server
-    # activate venv if not already
+    .venv\Scripts\activate   # activate if not already (source .venv/bin/activate on Mac/Linux)
     uvicorn app.main:app --port 8000 --reload
     ```
+    Run its tests with `pytest` from the same directory.
 2.  **Express Backend Server:** Start the core Node service:
     ```bash
     cd server

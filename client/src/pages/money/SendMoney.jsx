@@ -6,6 +6,7 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Avatar from '../../components/ui/Avatar';
 import Amount from '../../components/ui/Amount';
+import IconBadge from '../../components/ui/IconBadge';
 import { AmountInput, Field } from '../../components/ui/Field';
 import { DetailRow } from '../../components/ui/List';
 import RecipientPicker from '../../features/transfer/RecipientPicker';
@@ -120,12 +121,13 @@ const SendMoney = () => {
     if (step === 'done') {
         return (
             <div className="mx-auto max-w-md py-6 text-center">
-                <span
-                    aria-hidden="true"
-                    className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-positive-soft text-positive animate-pop"
-                >
-                    <CheckCircle2 size={32} />
-                </span>
+                <IconBadge
+                    icon={<CheckCircle2 size={32} />}
+                    tone="positive"
+                    size="xl"
+                    pulse
+                    className="mx-auto"
+                />
 
                 {/* `role="status"` so the outcome is announced. A success screen
                     that is only visual leaves a screen reader user unsure
@@ -274,7 +276,7 @@ const SendMoney = () => {
 
             {step === 'review' && (
                 <div className="space-y-4">
-                    <Card variant="raised" className="text-center">
+                    <Card variant="glass" className="text-center">
                         <p className="text-sm text-text-muted">You are sending</p>
                         <div className="mt-1.5">
                             <Amount value={numericAmount} size="display" tone="neutral" />

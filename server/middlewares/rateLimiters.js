@@ -9,8 +9,10 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
  *   - POST /auth/login          — password brute force
  *   - POST /auth/verify-login-otp — 6-digit OTP brute force (10^6 space)
  *   - POST /auth/resend-login-otp — free email-bombing relay via our SMTP account
- *   - POST /ai/chat             — unbounded Gemini spend on our API key
  *   - POST /transactions/transfer — transfer flooding
+ *
+ * AI spend is no longer limited here: the browser calls the AI service
+ * directly, which applies its own per-user ceiling (fastapi-server/app/ratelimit.py).
  *
  * Keys are per-IP by default and per-user where the route is authenticated,
  * because a single authenticated attacker rotating IPs would otherwise slip
@@ -75,15 +77,6 @@ export const otpSendLimiter = rateLimit({
     limit: 4,
     keyGenerator: byUserOrIp,
     message: { message: 'Too many codes requested. Please wait before trying again.' },
-});
-
-/** Every Gemini call costs money on our key. */
-export const aiLimiter = rateLimit({
-    ...standard,
-    windowMs: 5 * 60 * 1000,
-    limit: 25,
-    keyGenerator: byUserOrIp,
-    message: { message: 'You are sending messages too quickly. Please slow down.' },
 });
 
 /** Money movement. */

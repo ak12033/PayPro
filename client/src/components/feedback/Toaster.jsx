@@ -20,11 +20,13 @@ const Toaster = () => (
         toastOptions={{
             duration: 4000,
             style: {
-                background: 'var(--color-overlay)',
+                background: 'var(--color-surface-glass)',
                 color: 'var(--color-text)',
-                border: '1px solid var(--color-border)',
+                border: '1px solid var(--color-border-glass)',
                 borderRadius: 'var(--radius-card)',
                 boxShadow: 'var(--shadow-overlay)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
                 fontSize: '0.875rem',
                 padding: '0.75rem 1rem',
                 maxWidth: '26rem',

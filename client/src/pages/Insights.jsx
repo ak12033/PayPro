@@ -11,6 +11,7 @@ import InsightCard from '../features/ai/InsightCard';
 import AssistantSheet from '../features/ai/AssistantSheet';
 import useQuery from '../hooks/useQuery';
 import { transactionApi } from '../services/api/endpoints/transactionApi';
+import { aiApi } from '../services/api/endpoints/aiApi';
 
 /**
  * Recharts, loaded here and nowhere else.
@@ -70,7 +71,7 @@ const Insights = () => {
      * first paint depend on a language model.
      */
     const insights = useQuery(
-        async () => (await transactionApi.getInsights()).data,
+        async () => (await aiApi.getInsights()).data,
         { enabled: false }
     );
 

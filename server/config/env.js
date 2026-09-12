@@ -14,8 +14,7 @@ const config = {
     CORS_ORIGIN: process.env.CORS_ORIGIN,
     PORT: process.env.PORT,
     RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
-    MONGO_URI: process.env.MONGO_URI,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY
+    MONGO_URI: process.env.MONGO_URI
 };
 
 /**
@@ -62,7 +61,7 @@ export const validateConfig = () => {
         console.warn(`⚠️  ${message}`);
     }
 
-    const soft = ['EMAIL_USER', 'EMAIL_PASS', 'GEMINI_API_KEY', 'FASTAPI_URL']
+    const soft = ['EMAIL_USER', 'EMAIL_PASS', 'FASTAPI_URL']
         .filter((key) => !config[key]);
     if (soft.length) {
         console.warn(`⚠️  Optional env vars not set (those features will degrade): ${soft.join(', ')}`);

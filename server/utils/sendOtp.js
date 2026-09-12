@@ -85,16 +85,32 @@ ${copy.warning}
 
 Stay safe,
 PayPro Security Team`,
+        /*
+         * Inline literals, and they have to be: mail clients strip <style>
+         * blocks and none of them can resolve a CSS custom property, so the
+         * app's tokens cannot reach here. The values below are the light-mode
+         * values of `--color-accent` (#0e7490), `--color-text` (#0d1117),
+         * `--color-text-secondary` (#465561) and `--color-accent-soft`
+         * (#cffafe) from client/src/styles/tokens.css, copied deliberately.
+         *
+         * They were `#007bff` and `#333` — Bootstrap's default blue on a
+         * generic grey, which belonged to no palette the product has ever
+         * had. A verification code is the first thing a new user sees with
+         * the product's name on it, and it was arriving in a different brand
+         * than the app it unlocks.
+         */
         html: `
-      <div style="font-family: Arial, sans-serif; color: #333;">
-        <h2 style="color: #007bff;">🔐 ${copy.heading}</h2>
-        <p>Hello,</p>
-        <p>${copy.intro}</p>
-        <h1 style="color: #007bff; letter-spacing: 4px;">${otp}</h1>
-        <p>This code will expire in <strong>10 minutes</strong>.</p>
-        <p>${copy.warning}</p>
+      <div style="font-family: Arial, Helvetica, sans-serif; color: #465561; line-height: 1.5;">
+        <h2 style="color: #0d1117; margin: 0 0 16px;">🔐 ${copy.heading}</h2>
+        <p style="margin: 0 0 12px;">Hello,</p>
+        <p style="margin: 0 0 20px;">${copy.intro}</p>
+        <p style="margin: 0 0 20px;">
+          <span style="display: inline-block; background: #cffafe; color: #0e7490; font-size: 32px; font-weight: bold; letter-spacing: 8px; padding: 14px 24px; border-radius: 10px;">${otp}</span>
+        </p>
+        <p style="margin: 0 0 12px;">This code will expire in <strong style="color: #0d1117;">10 minutes</strong>.</p>
+        <p style="margin: 0 0 12px;">${copy.warning}</p>
         <br/>
-        <p>Stay safe,<br/><strong>PayPro Security Team</strong></p>
+        <p style="margin: 0;">Stay safe,<br/><strong style="color: #0d1117;">PayPro Security Team</strong></p>
       </div>
     `,
     });

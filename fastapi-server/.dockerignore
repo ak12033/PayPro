@@ -8,3 +8,10 @@ venv
 Dockerfile
 .dockerignore
 *.md
+
+# Dev-only: the image installs requirements.txt and copies app/ only.
+tests
+requirements-dev.txt
+pyproject.toml
+.pytest_cache
+.ruff_cache

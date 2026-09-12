@@ -4,7 +4,35 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist'] },
+  /**
+   * `test.jsx` is the design-reference prototype the current UI was built
+   * from, not application code — it lives outside `src/`, is imported by
+   * nothing and never reaches a bundle. It is linted out rather than deleted
+   * so the reference survives, but it should not hold the build to the same
+   * standard as shipped code. Safe to delete once it is no longer being
+   * referred to.
+   */
+  { ignores: ['dist', 'test.jsx'] },
+  /**
+   * The Firebase messaging service worker.
+   *
+   * It runs in a ServiceWorkerGlobalScope, not a window: `importScripts` and
+   * the `firebase` global installed by the compat scripts it loads are both
+   * legitimate there, but neither exists in `globals.browser`, so the file
+   * reported four `no-undef` errors that could never be fixed in the file
+   * itself. Scoping the correct globals to it is the fix; disabling the rule
+   * inline would have hidden real typos in the same file.
+   */
+  {
+    files: ['public/firebase-messaging-sw.js'],
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker,
+        importScripts: 'readonly',
+        firebase: 'readonly',
+      },
+    },
+  },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {

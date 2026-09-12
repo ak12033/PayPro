@@ -16,8 +16,8 @@ const ToastCard = ({ title, message, visible = true }) => (
     <div
         role="status"
         className={cn(
-            'pointer-events-auto flex w-full max-w-sm gap-3 rounded-card border border-border',
-            'bg-overlay p-3.5 shadow-overlay',
+            'pointer-events-auto flex w-full max-w-sm gap-3 rounded-card border border-border-glass',
+            'bg-surface-glass p-3.5 shadow-overlay backdrop-blur-xl',
             visible ? 'animate-rise' : 'opacity-0 transition-opacity'
         )}
     >

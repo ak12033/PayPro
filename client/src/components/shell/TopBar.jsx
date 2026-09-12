@@ -36,7 +36,7 @@ const TopBar = () => {
         <header
             className={cn(
                 'sticky top-0 z-30 flex h-14 items-center gap-2 px-4 sm:h-16 sm:px-6',
-                'border-b border-border bg-canvas/90 backdrop-blur-md'
+                'border-b border-border-glass bg-canvas/80 backdrop-blur-xl'
             )}
         >
             {/* The wordmark only appears where the sidebar is hidden, so the
@@ -44,7 +44,7 @@ const TopBar = () => {
             <Link to={ROUTES.HOME} className="flex items-center gap-2 lg:hidden">
                 <span
                     aria-hidden="true"
-                    className="grid h-7 w-7 place-items-center rounded-control bg-accent text-on-accent"
+                    className="grid h-7 w-7 place-items-center rounded-control bg-gradient-brand text-on-accent"
                 >
                     <Sparkles size={15} />
                 </span>
@@ -91,7 +91,7 @@ const TopBar = () => {
                         className={cn(
                             'pointer-events-none absolute -right-0.5 -top-0.5',
                             'grid min-w-4 place-items-center rounded-pill bg-danger px-1',
-                            'text-[10px] font-semibold leading-4 text-white'
+                            'text-[10px] font-semibold leading-4 text-on-danger'
                         )}
                     >
                         {unreadCount > 9 ? '9+' : unreadCount}

@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import cn from '../../lib/cn';
 import Spinner from './Spinner';
+
+/** Max pull distance and the radius it's computed within, both in px. */
+const MAGNET_MAX_OFFSET = 8;
+const MAGNET_RADIUS = 64;
 
 /**
  * The button.
@@ -12,17 +16,34 @@ import Spinner from './Spinner';
  * treatment can change globally without re-auditing call sites.
  */
 const VARIANTS = {
-    /** The one thing this screen is for. At most one per view. */
-    primary:
-        'bg-accent text-on-accent hover:bg-accent-hover active:bg-accent-hover shadow-raised',
-    /** Equal-weight alternatives, and the default for most actions. */
+    /**
+     * The one thing this screen is for. At most one per view.
+     *
+     * The brand gradient itself, and the only place in the product that gets
+     * it at full strength — this is the button the palette was drawn from.
+     */
+    /* Press feedback (`scale`) lives in the `.btn-magnetic` utility instead of
+       here — see Button's magnetic-hover effect below. An `active:scale-[]`
+       class here would fight the inline transform that effect writes,
+       because an inline style always wins over a class. */
+    primary: 'bg-gradient-brand text-on-accent shadow-glow-accent hover:brightness-110 active:brightness-95',
+    /**
+     * Equal-weight alternatives, and the default for most actions.
+     *
+     * Neutral at rest, accent-tinted on the hairline once the pointer is on
+     * it: enough to tie it to the primary without competing with it.
+     */
     secondary:
-        'bg-surface text-text border border-border hover:bg-surface-hover active:bg-surface-active',
-    /** Low-emphasis, sits inline with content. */
+        'bg-surface text-text border border-border hover:border-accent-border hover:bg-surface-hover active:bg-surface-active',
+    /**
+     * Low-emphasis, sits inline with content. Also the default for every bare
+     * IconButton, which is why its hover is worth branding — it is the most
+     * frequently hovered surface in the chrome.
+     */
     ghost:
-        'text-text-secondary hover:bg-surface-hover hover:text-text active:bg-surface-active',
+        'text-text-secondary hover:bg-accent-soft hover:text-accent-text active:bg-accent-soft active:text-accent-active',
     /** Destructive and irreversible. Never the default focus target. */
-    danger: 'bg-danger text-white hover:opacity-90 active:opacity-95 shadow-raised',
+    danger: 'bg-danger text-on-danger hover:opacity-90 active:opacity-95 shadow-raised',
     /** AI-initiated actions, tinted so generated content is always labelled. */
     ai: 'bg-ai-soft text-ai border border-ai/20 hover:brightness-105',
 };
@@ -49,6 +70,10 @@ const Button = React.forwardRef(function Button(
         fullWidth = false,
         loading = false,
         disabled = false,
+        /** Bounded pull-toward-cursor. Default on for `primary`; other variants
+            never get it — magnetic pull is reserved for the one action a
+            screen actually wants you to take. */
+        magnetic = true,
         icon = null,
         iconEnd = null,
         className,
@@ -58,9 +83,60 @@ const Button = React.forwardRef(function Button(
     },
     ref
 ) {
+    const innerRef = useRef(null);
+    const setRefs = (node) => {
+        innerRef.current = node;
+        if (typeof ref === 'function') ref(node);
+        else if (ref) ref.current = node;
+    };
+
+    const isMagnetic = variant === 'primary' && magnetic;
+
+    useEffect(() => {
+        if (!isMagnetic || disabled || loading) return undefined;
+        const el = innerRef.current;
+        if (!el) return undefined;
+
+        const canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!canHover || reduceMotion) return undefined;
+
+        // Attached only while the cursor is inside the button, never a
+        // page-wide listener — 14 primary buttons across the app each
+        // holding a permanent `pointermove` subscription would be wasteful
+        // for something that only ever matters while hovered.
+        const handleMove = (event) => {
+            const rect = el.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const dx = event.clientX - cx;
+            const dy = event.clientY - cy;
+            const dist = Math.hypot(dx, dy);
+            const clamped = Math.min(dist, MAGNET_RADIUS);
+            const scale = dist === 0 ? 0 : (clamped / dist) * (MAGNET_MAX_OFFSET / MAGNET_RADIUS);
+            el.style.setProperty('--magnet-x', `${dx * scale}px`);
+            el.style.setProperty('--magnet-y', `${dy * scale}px`);
+        };
+        const handleLeave = () => {
+            el.removeEventListener('pointermove', handleMove);
+            el.style.removeProperty('--magnet-x');
+            el.style.removeProperty('--magnet-y');
+        };
+        const handleEnter = () => el.addEventListener('pointermove', handleMove);
+
+        el.addEventListener('pointerenter', handleEnter);
+        el.addEventListener('pointerleave', handleLeave);
+
+        return () => {
+            el.removeEventListener('pointerenter', handleEnter);
+            el.removeEventListener('pointerleave', handleLeave);
+            el.removeEventListener('pointermove', handleMove);
+        };
+    }, [isMagnetic, disabled, loading]);
+
     return (
         <button
-            ref={ref}
+            ref={setRefs}
             type={type}
             disabled={disabled || loading}
             /**
@@ -72,11 +148,12 @@ const Button = React.forwardRef(function Button(
             className={cn(
                 'relative inline-flex select-none items-center justify-center',
                 'rounded-control font-medium whitespace-nowrap',
-                'transition-[background-color,color,opacity,box-shadow]',
+                'transition-[background-color,color,opacity,box-shadow,filter,transform]',
                 'duration-[--duration-fast] ease-[--ease-out]',
                 'disabled:pointer-events-none disabled:opacity-45',
                 VARIANTS[variant],
                 SIZES[size],
+                isMagnetic && 'btn-magnetic',
                 fullWidth && 'w-full',
                 className
             )}

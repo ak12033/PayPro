@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Download, Receipt, Search, SearchX } from 'lucide-react';
+import { ArrowUpDown, Download, Receipt, RefreshCw, Search, SearchX, X } from 'lucide-react';
 import PageHeader from '../components/layout/PageHeader';
 import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
+import Button, { IconButton } from '../components/ui/Button';
 import SegmentedControl from '../components/ui/SegmentedControl';
-import { Input } from '../components/ui/Field';
+import { Input, Select } from '../components/ui/Field';
 import { SkeletonRows } from '../components/ui/Skeleton';
 import { ListGroupHeader } from '../components/ui/List';
 import EmptyState from '../components/feedback/EmptyState';
@@ -17,11 +17,13 @@ import useDebouncedValue from '../hooks/useDebouncedValue';
 import { useSocket } from '../context/SocketContext';
 import { transactionApi } from '../services/api/endpoints/transactionApi';
 import { downloadBlob } from '../lib/downloadBlob';
-import { groupByDay } from '../utils/formatters';
+import { groupByDay, getRangeStartDate } from '../utils/formatters';
 import { getErrorMessage } from '../utils/errors';
 import {
     TRANSACTION_FILTERS,
     DEFAULT_TRANSACTION_FILTER,
+    DATE_RANGES,
+    DEFAULT_DATE_RANGE,
     HISTORY_PAGE_SIZE,
 } from '../constants/transactions';
 import toast from 'react-hot-toast';
@@ -66,14 +68,21 @@ const Activity = () => {
     const filter = params.get('filter') ?? DEFAULT_TRANSACTION_FILTER;
     const searchInput = params.get('q') ?? '';
     const search = useDebouncedValue(searchInput);
+    /** Set by the dashboard's category donut (`?category=`); exact match, no preset. */
+    const category = params.get('category') ?? '';
+    const range = params.get('range') ?? DEFAULT_DATE_RANGE;
+    const sortOrder = params.get('sort') === 'asc' ? 'asc' : 'desc';
 
-    const { data, loading, error, retry } = useQuery(
+    const { data, loading, refreshing, error, retry, refresh } = useQuery(
         async () => {
             const { data: payload } = await transactionApi.getHistory({
                 page,
                 limit: HISTORY_PAGE_SIZE,
                 filter: filter === DEFAULT_TRANSACTION_FILTER ? undefined : filter,
                 search: search || undefined,
+                category: category || undefined,
+                startDate: getRangeStartDate(range) || undefined,
+                sortOrder: sortOrder === 'asc' ? 'asc' : undefined,
             });
 
             setAccumulated((previous) =>
@@ -85,8 +94,22 @@ const Activity = () => {
 
             return payload;
         },
-        { deps: [page, filter, search] }
+        { deps: [page, filter, search, category, range, sortOrder] }
     );
+
+    /**
+     * Reload from the top.
+     *
+     * A background `refresh()` re-runs the fetcher for whatever page is
+     * currently in view, which is only correct when that page is 1 — for any
+     * later page it would append the same rows onto `accumulated` a second
+     * time. So a refresh first rewinds to page 1 (itself a fetch, via the
+     * effect above) and only calls `refresh()` directly when already there.
+     */
+    const handleRefresh = () => {
+        if (page === 1) refresh();
+        else setPage(1);
+    };
 
     /** Any control that changes the query must reset to page 1. */
     const updateParams = useCallback(
@@ -116,6 +139,9 @@ const Activity = () => {
         try {
             const response = await transactionApi.exportCsv({
                 filter: filter === DEFAULT_TRANSACTION_FILTER ? undefined : filter,
+                category: category || undefined,
+                search: search || undefined,
+                startDate: getRangeStartDate(range) || undefined,
             });
             downloadBlob(response.data, `paypro-activity-${new Date().toISOString().slice(0, 10)}.csv`);
         } catch (caught) {
@@ -129,7 +155,11 @@ const Activity = () => {
     const groups = groupByDay(transactions);
     const totalPages = data?.totalPages ?? 1;
     const hasMore = page < totalPages;
-    const isFiltered = filter !== DEFAULT_TRANSACTION_FILTER || Boolean(search);
+    // Sort order is a view preference, not a filter — it never changes which
+    // rows match, so it's deliberately left out of this (and out of "Clear
+    // filters", below).
+    const isFiltered =
+        filter !== DEFAULT_TRANSACTION_FILTER || Boolean(search) || Boolean(category) || range !== DEFAULT_DATE_RANGE;
     const isInitialLoad = loading && page === 1;
 
     /**
@@ -165,15 +195,25 @@ const Activity = () => {
             <PageHeader
                 title="Activity"
                 action={
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        icon={<Download size={15} />}
-                        loading={exporting}
-                        onClick={exportCsv}
-                    >
-                        <span className="hidden sm:inline">Export</span>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <IconButton
+                            label="Refresh activity"
+                            size="sm"
+                            onClick={handleRefresh}
+                            disabled={loading || refreshing}
+                        >
+                            <RefreshCw size={15} className={refreshing ? 'animate-spin' : undefined} />
+                        </IconButton>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={<Download size={15} />}
+                            loading={exporting}
+                            onClick={exportCsv}
+                        >
+                            <span className="hidden sm:inline">Export</span>
+                        </Button>
+                    </div>
                 }
             />
 
@@ -200,6 +240,53 @@ const Activity = () => {
                     value={filter}
                     onChange={(value) => updateParams({ filter: value === DEFAULT_TRANSACTION_FILTER ? null : value })}
                 />
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="w-36 shrink-0">
+                        <Select
+                            aria-label="Date range"
+                            value={range}
+                            onChange={(event) =>
+                                updateParams({
+                                    range: event.target.value === DEFAULT_DATE_RANGE ? null : event.target.value,
+                                })
+                            }
+                        >
+                            {DATE_RANGES.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </Select>
+                    </div>
+
+                    <IconButton
+                        label={
+                            sortOrder === 'asc'
+                                ? 'Sorted oldest first — switch to newest first'
+                                : 'Sorted newest first — switch to oldest first'
+                        }
+                        variant={sortOrder === 'asc' ? 'secondary' : 'ghost'}
+                        onClick={() => updateParams({ sort: sortOrder === 'asc' ? null : 'asc' })}
+                        className="shrink-0"
+                    >
+                        <ArrowUpDown size={16} />
+                    </IconButton>
+
+                    {category && (
+                        <span className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface-sunken py-1 pl-3 pr-1.5 text-xs font-medium text-text">
+                            Category: {category}
+                            <button
+                                type="button"
+                                onClick={() => updateParams({ category: null })}
+                                aria-label={`Clear ${category} category filter`}
+                                className="grid h-5 w-5 place-items-center rounded-full text-text-muted hover:bg-surface-active hover:text-text"
+                            >
+                                <X size={12} />
+                            </button>
+                        </span>
+                    )}
+                </div>
             </div>
 
             <Card padding="sm">
@@ -225,7 +312,7 @@ const Activity = () => {
                             isFiltered ? (
                                 <Button
                                     variant="secondary"
-                                    onClick={() => updateParams({ filter: null, q: null })}
+                                    onClick={() => updateParams({ filter: null, q: null, category: null, range: null })}
                                 >
                                     Clear filters
                                 </Button>

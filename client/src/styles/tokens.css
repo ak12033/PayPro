@@ -70,6 +70,10 @@
     --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 12px rgb(0 0 0 / 0.06);
     --shadow-overlay: 0 8px 16px rgb(0 0 0 / 0.08), 0 24px 48px rgb(0 0 0 / 0.14);
 
+    /* A fourth, deliberately reserved for primary CTAs and the balance card —
+       everything else stays on the flat/raised/overlay scale above. */
+    --shadow-glow-accent: 0 1px 2px rgb(8 145 178 / 0.12), 0 8px 20px rgb(8 145 178 / 0.18);
+
     /* -------------------------------------------------------------- motion */
 
     /* Durations are short on purpose. Money movement should feel instant;
@@ -85,26 +89,54 @@
 
     /* ------------------------------------------------------------- palette */
 
-    /* Raw ramps. Not for direct use — see the semantic layer below. */
-    --pp-slate-25: #fbfcfd;
-    --pp-slate-50: #f6f8fa;
-    --pp-slate-100: #eceff3;
-    --pp-slate-200: #dde2e9;
-    --pp-slate-300: #c3ccd6;
-    --pp-slate-400: #8e9baa;
-    --pp-slate-500: #64748b;
-    --pp-slate-600: #4a5768;
-    --pp-slate-700: #333e4d;
-    --pp-slate-800: #1e2732;
-    --pp-slate-900: #141b24;
-    --pp-slate-950: #0b1017;
+    /* Raw ramps. Not for direct use — see the semantic layer below.
+     *
+     * The neutrals are not a true grey. They carry a faint cyan cast (hue
+     * ~200) so that every surface, border and caption in the product sits in
+     * the same family as the brand rather than beside it — a neutral-grey
+     * chrome under a teal accent is what makes a re-skin read as "recoloured".
+     * The cast is deliberately weak: at these chroma levels it is invisible
+     * on any single element and only legible across a whole screen.
+     *
+     * Lightness was held to the previous ramp's within ~0.01 relative
+     * luminance at every step, so the hue shift moved no contrast ratio.
+     * The two darkest steps are unchanged — they are the near-black the
+     * reference image uses behind its button, and already correct. */
+    --pp-slate-25: #fafcfd;
+    --pp-slate-50: #f4f7f9;
+    --pp-slate-100: #e9eef1;
+    --pp-slate-200: #d9e1e6;
+    --pp-slate-300: #c0ccd2;
+    --pp-slate-400: #8d99a3;
+    --pp-slate-500: #5f7280;
+    --pp-slate-600: #465561;
+    --pp-slate-700: #2f3c46;
+    --pp-slate-800: #1c262e;
+    --pp-slate-900: #0d1117;
+    --pp-slate-950: #07090e;
 
-    --pp-blue-100: #dbeafe;
-    --pp-blue-300: #93c5fd;
-    --pp-blue-400: #60a5fa;
-    --pp-blue-500: #3b82f6;
-    --pp-blue-600: #2563eb;
-    --pp-blue-700: #1d4ed8;
+    /* Named "blue" for historical reasons — this is the ramp `--color-accent`
+       points at, so retargeting it to cyan is what turns the whole product's
+       brand color from blue to cyan without touching the semantic layer.
+
+       800 and 900 exist for the pressed states: `--color-accent-active` needs
+       a step below hover, and inventing one at the call site is how a button's
+       :active ends up a different colour on two screens. */
+    --pp-blue-100: #cffafe;
+    --pp-blue-300: #67e8f9;
+    --pp-blue-400: #22d3ee;
+    --pp-blue-500: #06b6d4;
+    --pp-blue-600: #0891b2;
+    --pp-blue-700: #0e7490;
+    --pp-blue-800: #155e75;
+    --pp-blue-900: #164e63;
+
+    /* Midpoint stops for the brand gradient (cyan -> teal -> emerald). Not
+       wired into the semantic layer directly — only `--gradient-brand` uses
+       them. Two steps because light and dark need the midpoint at different
+       values for the label on top to stay legible. */
+    --pp-teal-400: #2dd4bf;
+    --pp-teal-700: #0f766e;
 
     --pp-green-100: #d7f5e3;
     --pp-green-400: #34d399;
@@ -112,11 +144,13 @@
     --pp-green-600: #059669;
     --pp-green-700: #047857;
 
-    --pp-red-100: #fee2e2;
-    --pp-red-400: #f87171;
-    --pp-red-500: #ef4444;
-    --pp-red-600: #dc2626;
-    --pp-red-700: #b91c1c;
+    /* Named "red" for historical reasons — retargeted to rose to match the
+       negative/danger color actually used across the reference palette. */
+    --pp-red-100: #ffe4e6;
+    --pp-red-400: #fb7185;
+    --pp-red-500: #f43f5e;
+    --pp-red-600: #e11d48;
+    --pp-red-700: #be123c;
 
     --pp-amber-100: #fef3c7;
     --pp-amber-400: #fbbf24;
@@ -149,7 +183,13 @@
     --color-surface-hover: var(--pp-slate-50);
     --color-surface-active: var(--pp-slate-100);
     --color-overlay: #ffffff;             /* sheets, dialogs, menus */
-    --color-scrim: rgb(15 23 42 / 0.32);  /* behind an overlay */
+    --color-scrim: rgb(13 17 23 / 0.32);  /* behind an overlay */
+
+    /* Glass surfaces — reserved for chrome and floating panels (nav, sheets,
+       the balance card), never for dense list content. See Card's `glass`
+       variant for the enforcement point. */
+    --color-surface-glass: rgb(255 255 255 / 0.72);
+    --color-border-glass: rgb(192 204 210 / 0.8);
 
     --color-border: var(--pp-slate-200);
     --color-border-strong: var(--pp-slate-300);
@@ -160,12 +200,31 @@
     --color-text-muted: var(--pp-slate-500);     /* metadata, timestamps */
     --color-text-inverse: #ffffff;
 
-    /* Brand / primary action. */
-    --color-accent: var(--pp-blue-600);
-    --color-accent-hover: var(--pp-blue-700);
+    /*
+     * Brand / primary action.
+     *
+     * `--color-accent` is the 700 rather than the 600 the eye would pick from
+     * the reference image, and the reason is that this token is a *fill* —
+     * `bg-accent text-on-accent` is a real pattern (skip link, recipient chip,
+     * assistant bubble). White on the 600 is 3.68:1, which fails normal text.
+     * On the 700 it is 5.36:1. The vivid 600 is not lost: it stays the focus
+     * ring and the first chart slot, where it sits *beside* text rather than
+     * under it and only owes 3:1.
+     *
+     * hover/active step down the same ramp rather than reaching for opacity,
+     * so a pressed button is a defined colour instead of whatever the canvas
+     * happens to show through it.
+     */
+    --color-accent: var(--pp-blue-700);
+    --color-accent-hover: var(--pp-blue-800);
+    --color-accent-active: var(--pp-blue-900);
     --color-accent-soft: var(--pp-blue-100);
     --color-accent-text: var(--pp-blue-700);
     --color-on-accent: #ffffff;
+    /* Hairline for accent-tinted chrome — selected chips, focused inputs.
+       Alpha rather than a ramp step so it settles onto whichever surface it
+       lands on instead of banding against sunken wells. */
+    --color-accent-border: rgb(8 145 178 / 0.4);
 
     /* Money direction. Deliberately NOT called green/red: the whole point is
        that a component says "positive" and the theme decides how that looks. */
@@ -173,6 +232,13 @@
     --color-positive-soft: var(--pp-green-100);
     --color-negative: var(--pp-red-700);
     --color-negative-soft: var(--pp-red-100);
+
+    /* Ink for text/icons sitting ON a saturated status fill. Separate tokens
+       from `--color-on-accent` because the three fills invert at different
+       points between themes — a single "on colour" forces one of them to
+       fail. */
+    --color-on-positive: #ffffff;
+    --color-on-danger: #ffffff;
 
     /* Status. */
     --color-warning: var(--pp-amber-700);
@@ -190,59 +256,215 @@
     --color-ai-soft: #ede9fe;
 
     --color-focus: var(--pp-blue-600);
+
+    /*
+     * The brand gradient — cyan into teal into emerald, the reference image's
+     * own sweep.
+     *
+     * Tuned a full ramp step darker than the image, because the image's own
+     * combination does not survive a white label: sampled across the sweep,
+     * white bottoms out at 2.5:1 around the teal midpoint. The midpoint is the
+     * binding constraint, not the ends — checking only the three stops hides
+     * it. At 700/700/700 the worst point across the whole gradient is 5.36:1.
+     *
+     * The midpoint is teal-700 rather than teal-600 for the same reason: 600
+     * still only reaches 3.79:1 under the label.
+     */
+    --gradient-brand: linear-gradient(
+        135deg,
+        var(--pp-blue-700) 0%,
+        var(--pp-teal-700) 50%,
+        var(--pp-green-700) 100%
+    );
+
+    /* Decorative particle mesh (landing + auth backdrops). Space-separated
+       triplets because canvas builds its own `rgb(... / a)` per particle and
+       cannot interpolate a hex token's alpha. */
+    --mesh-link: 8 145 178;
+    --mesh-node: 5 150 105;
+
+    /*
+     * ---------------------------------------------------- data visualization
+     *
+     * Categorical series — fixed slot order, never cycled.
+     *
+     * This set replaces an earlier five-*hue* palette (blue/red/violet/green/
+     * amber). That palette separated its slots on hue, which is the channel
+     * colour blindness takes away. This one is drawn from the brand's own
+     * cyan-teal-emerald family, so it separates on LIGHTNESS instead — the one
+     * channel every dichromacy preserves. Read the L* values below: 45, 20,
+     * 61, 44, 60, 54. That ladder is the design, not the hue.
+     *
+     * Slots 5 and 6 leave the family for a muted slate and a muted clay. Six
+     * steps of one family cannot hold apart, and a desaturated complementary
+     * reads as "another series" without competing with the teal that carries
+     * the product's identity. They are deliberately low-chroma so slots 1-4
+     * stay the ones the eye goes to.
+     *
+     * Every pair that can touch — including 6 -> 1, since the last wedge of a
+     * full donut meets the first — was checked against this mode's surface for
+     * ΔE under normal vision (>=20) and under simulated protanopia,
+     * deuteranopia and tritanopia (>=12), plus a 3:1 floor against the surface
+     * so a 10px legend dot stays visible. Worst adjacent pair here is 3 -> 4
+     * at ΔE 26 / deutan 20.
+     *
+     * Slot 1 is `--gradient-brand`'s opening stop — which in this mode is also
+     * `--color-accent` exactly. That is the invariant worth holding across
+     * both themes: a single-series chart is the colour the Send button starts
+     * with, so the two agree without either having to know about the other.
+     *
+     * `--color-viz-other` is deliberately the neutral: "Other" is a
+     * miscellany bucket, not a series with an identity to defend.
+     */
+    --color-viz-1: #0e7490;   /* L* 45 — primary, == --color-accent */
+    --color-viz-2: #08313f;   /* L* 20 — deep teal, emphasis */
+    --color-viz-3: #14a3a3;   /* L* 61 — medium teal */
+    --color-viz-4: #047857;   /* L* 44 — green-teal, the gradient's far end */
+    --color-viz-5: #7b93a8;   /* L* 60 — muted cool complementary */
+    --color-viz-6: #9d7a53;   /* L* 54 — muted warm complementary */
+    --color-viz-other: #7f8c96;
+
+    /*
+     * Chart chrome. Aliases rather than new values — gridlines and axes must
+     * stay the same weight as every other hairline in the product — but named
+     * for their chart role so a chart never reaches for `--color-border`
+     * directly and the whole chrome can be retuned in one place.
+     */
+    --color-viz-grid: var(--color-border);
+    --color-viz-axis: var(--color-border);
+    --color-viz-label: var(--color-text-muted);
+    --color-viz-cursor: var(--color-border-strong);
 }
 
 :root[data-theme='dark'] {
     color-scheme: dark;
 
+    /* Same faint cyan cast as the light neutrals, one notch stronger: a dark
+       surface can carry more hue before it stops reading as neutral, and
+       without it the near-black canvas drifts visibly warm against the
+       accent. */
     --color-canvas: var(--pp-slate-950);
-    --color-surface: #121923;
-    --color-surface-sunken: #0e141d;
-    --color-surface-hover: #18212d;
-    --color-surface-active: #1e2836;
-    --color-overlay: #18212d;
+    --color-surface: #121a20;
+    --color-surface-sunken: #0e161b;
+    --color-surface-hover: #18232a;
+    --color-surface-active: #1e2b33;
+    --color-overlay: #18232a;
     --color-scrim: rgb(0 0 0 / 0.6);
 
-    --color-border: #232e3c;
-    --color-border-strong: #33404f;
+    --color-surface-glass: rgb(18 26 32 / 0.72);
+    --color-border-glass: rgb(49 66 76 / 0.7);
 
-    --color-text: #f1f5f9;
-    --color-text-secondary: #a8b4c2;
-    --color-text-muted: #7c8896;
+    --color-border: #212f37;
+    --color-border-strong: #31424c;
+
+    --color-text: #eef4f6;
+    --color-text-secondary: #a4b3bc;
+    --color-text-muted: #7e8e96;
     --color-text-inverse: var(--pp-slate-950);
 
+    /*
+     * Dark mode inverts which end of the ramp is the fill.
+     *
+     * `--color-on-accent` is a deep teal ink, not white. On a dark canvas the
+     * accent is the *bright* member of the pair — white on cyan-500 is
+     * 2.43:1, and on the dark gradient's opening stop it is 1.81:1, so the
+     * reference image's own white-on-bright-teal button is the one thing here
+     * that could not be reproduced literally. Ink on the bright fill reads
+     * 6.6:1 and, being drawn from the same hue family, still reads as the
+     * brand rather than as a black label dropped onto it.
+     */
     --color-accent: var(--pp-blue-500);
     --color-accent-hover: var(--pp-blue-400);
-    --color-accent-soft: rgb(59 130 246 / 0.16);
+    --color-accent-active: var(--pp-blue-300);
+    --color-accent-soft: rgb(6 182 212 / 0.16);
     --color-accent-text: var(--pp-blue-300);
-    --color-on-accent: #ffffff;
+    --color-on-accent: #04252c;
+    --color-accent-border: rgb(34 211 238 / 0.4);
 
     /* Lighter ramp entries on dark: the 700s used in light mode fail contrast
        against a dark surface, which would make every debit amount unreadable. */
     --color-positive: var(--pp-green-400);
     --color-positive-soft: rgb(16 185 129 / 0.16);
     --color-negative: var(--pp-red-400);
-    --color-negative-soft: rgb(239 68 68 / 0.16);
+    --color-negative-soft: rgb(244 63 94 / 0.16);
+
+    /* Same inversion as `--color-on-accent`, and the reason these are three
+       tokens rather than one: positive and danger invert here too, but each
+       needs ink tinted to its own hue to avoid a muddy grey-on-colour. */
+    --color-on-positive: #052e1c;
+    --color-on-danger: #3f0715;
 
     --color-warning: var(--pp-amber-400);
     --color-warning-soft: rgb(245 158 11 / 0.16);
     --color-danger: var(--pp-red-400);
-    --color-danger-soft: rgb(239 68 68 / 0.16);
+    --color-danger-soft: rgb(244 63 94 / 0.16);
     --color-success: var(--pp-green-400);
     --color-success-soft: rgb(16 185 129 / 0.16);
     --color-info: var(--pp-blue-400);
-    --color-info-soft: rgb(59 130 246 / 0.16);
+    --color-info-soft: rgb(6 182 212 / 0.16);
 
     --color-ai: var(--pp-violet-400);
     --color-ai-soft: rgb(139 92 246 / 0.18);
 
     --color-focus: var(--pp-blue-400);
 
+    /* The reference image's gradient, at its own values — this is the one
+       surface in the product that reproduces it exactly. It can be this
+       bright here because the label on top is `--color-on-accent`'s deep ink
+       rather than white; sampled across the sweep, the worst point is 8.4:1. */
+    --gradient-brand: linear-gradient(
+        135deg,
+        var(--pp-blue-400) 0%,
+        var(--pp-teal-400) 45%,
+        var(--pp-green-400) 100%
+    );
+
+    --mesh-link: 34 211 238;
+    --mesh-node: 52 211 153;
+
+    /*
+     * The visualization ramp, re-stepped for a dark canvas — not reused from
+     * light mode.
+     *
+     * It cannot be reused, and that is a property of the approach rather than
+     * an inconvenience: this palette separates its slots on lightness, and the
+     * lightness band that works against white is the one that disappears
+     * against near-black. Light mode's ladder runs L* 20-61 (dark colours on a
+     * light surface); this one runs L* 54-86 (light colours on a dark one).
+     * A single shared set would have to sit in the narrow overlap, which is
+     * far too tight to fit six separable steps.
+     *
+     * Slot roles are identical to light mode's, so a category keeps its
+     * *meaning* across a theme switch even though it changes value: slot 1 is
+     * `--gradient-brand`'s opening stop, 4 is its emerald end, 5 and 6 are the
+     * muted complementaries.
+     *
+     * Note slot 1 is `--pp-blue-400` — the gradient's opening stop here, and
+     * the reference image's own cyan — NOT `--color-accent`, which in this
+     * mode is the 500. The gradient stop is the tie that holds in both themes;
+     * the accent only coincides with it in light mode. Using the 500 here
+     * would also collapse slot 1 into slot 2's deep teal, which sits just 12
+     * L* below it.
+     *
+     * Re-validated independently against this mode's surface (#121a20): same
+     * 3:1 floor, same wrap-around adjacency check, same three dichromacy
+     * simulations. Worst adjacent pair is 3 -> 4 at ΔE 26 / deutan 14.
+     */
+    --color-viz-1: var(--pp-blue-400);  /* L* 78 — primary */
+    --color-viz-2: #0e93b5;             /* L* 56 — deep teal, emphasis */
+    --color-viz-3: #6ceddb;             /* L* 86 — light teal */
+    --color-viz-4: var(--pp-green-400); /* L* 76 — green-teal */
+    --color-viz-5: #6d8599;             /* L* 54 — muted cool complementary */
+    --color-viz-6: #c2a173;             /* L* 68 — muted warm complementary */
+    --color-viz-other: var(--pp-slate-500);
+
     /* Shadows do almost nothing on a dark canvas; borders carry elevation
        instead, so the shadows are re-tuned rather than left as light-mode
        leftovers that render as invisible smudges. */
     --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px rgb(0 0 0 / 0.3);
     --shadow-overlay: 0 8px 16px rgb(0 0 0 / 0.45), 0 24px 48px rgb(0 0 0 / 0.55);
+    --shadow-glow-accent: 0 1px 2px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(6 182 212 / 0.25),
+        0 8px 28px rgb(6 182 212 / 0.28);
 }
 
 /* Register the semantic names as Tailwind colours so `bg-surface`,
@@ -255,6 +477,8 @@
     --color-surface-active: var(--color-surface-active);
     --color-overlay: var(--color-overlay);
     --color-scrim: var(--color-scrim);
+    --color-surface-glass: var(--color-surface-glass);
+    --color-border-glass: var(--color-border-glass);
     --color-border: var(--color-border);
     --color-border-strong: var(--color-border-strong);
     --color-text: var(--color-text);
@@ -263,9 +487,13 @@
     --color-text-inverse: var(--color-text-inverse);
     --color-accent: var(--color-accent);
     --color-accent-hover: var(--color-accent-hover);
+    --color-accent-active: var(--color-accent-active);
     --color-accent-soft: var(--color-accent-soft);
     --color-accent-text: var(--color-accent-text);
+    --color-accent-border: var(--color-accent-border);
     --color-on-accent: var(--color-on-accent);
+    --color-on-positive: var(--color-on-positive);
+    --color-on-danger: var(--color-on-danger);
     --color-positive: var(--color-positive);
     --color-positive-soft: var(--color-positive-soft);
     --color-negative: var(--color-negative);

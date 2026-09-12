@@ -62,7 +62,7 @@ jobs:
           VITE_BACKEND_URL: https://api.example.com
 
   ai:
-    name: AI service — import check
+    name: AI service — lint & tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -74,12 +74,19 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: fastapi-server/requirements.txt
+          cache-dependency-path: |
+            fastapi-server/requirements.txt
+            fastapi-server/requirements-dev.txt
 
-      - run: pip install -r requirements.txt
+      # Pulls in requirements.txt too, so this also proves the pinned
+      # production set installs cleanly.
+      - run: pip install -r requirements-dev.txt
 
       - name: Compile check
         run: python -m compileall -q app
+
+      - name: Lint
+        run: ruff check .
 
       # Proves the app actually constructs (routes register, deps resolve)
       # rather than only that the files parse.
@@ -87,4 +94,11 @@ jobs:
         run: python -c "from app.main import app; print(f'{len(app.routes)} routes registered')"
         env:
           GEMINI_API_KEY: ci-placeholder
+          JWT_SECRET: ci-placeholder-secret-at-least-32-characters
+          MONGO_URI: mongodb://localhost:27017
           ENVIRONMENT: development
+
+      # The suite stubs every Gemini call AND the database, so no API key is
+      # consumed and no MongoDB service is needed.
+      - name: Tests
+        run: pytest

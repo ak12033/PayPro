@@ -71,8 +71,15 @@ const SecurityScore = ({ checks }) => {
                         aria-label="Security protections enabled"
                         className="mt-3 h-1.5 overflow-hidden rounded-pill bg-border"
                     >
+                        {/* Brand accent while there is still work to do, positive
+                            once there isn't — so the fill agrees with the shield
+                            icon beside it rather than reading as "all good" at
+                            30% complete. */}
                         <div
-                            className="h-full rounded-pill bg-positive transition-[width] duration-[--duration-slow] ease-[--ease-out]"
+                            className={cn(
+                                'h-full rounded-pill transition-[width,background-color] duration-[--duration-slow] ease-[--ease-out]',
+                                allDone ? 'bg-positive' : 'bg-accent'
+                            )}
                             style={{ width: `${total ? (done / total) * 100 : 0}%` }}
                         />
                     </div>
@@ -100,7 +107,7 @@ const CheckRow = ({ check }) => {
                     check.comingSoon
                         ? 'border-border text-text-muted'
                         : check.done
-                          ? 'border-positive bg-positive text-white'
+                          ? 'border-positive bg-positive text-on-positive'
                           : 'border-warning text-warning'
                 )}
             >

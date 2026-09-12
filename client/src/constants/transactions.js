@@ -17,6 +17,24 @@ export const TRANSACTION_FILTERS = [
 /** `All` means "no preset", not a preset literally named All. */
 export const DEFAULT_TRANSACTION_FILTER = 'All';
 
+/**
+ * Date-range presets for the history page.
+ *
+ * Values are resolved to an ISO `startDate` client-side (`getRangeStartDate`
+ * in `utils/formatters`) rather than sent as-is — the server's `/history`
+ * endpoint takes a concrete timestamp, not a rolling window, so "Last 7 days"
+ * has to mean something at the moment the request is made.
+ */
+export const DATE_RANGES = [
+    { value: 'All', label: 'All time' },
+    { value: 'Today', label: 'Today' },
+    { value: '7d', label: 'Last 7 days' },
+    { value: '30d', label: 'Last 30 days' },
+    { value: '90d', label: 'Last 90 days' },
+];
+
+export const DEFAULT_DATE_RANGE = 'All';
+
 export const TRANSACTION_CATEGORIES = [
     'General',
     'Food',

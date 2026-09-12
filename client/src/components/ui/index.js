@@ -10,6 +10,8 @@ export { default as Button, IconButton } from './Button';
 export { default as Card, CardHeader } from './Card';
 export { default as Badge } from './Badge';
 export { default as Avatar, getInitials } from './Avatar';
+export { default as IconBadge } from './IconBadge';
+export { default as NetworkMesh } from './NetworkMesh';
 export { default as Amount, LedgerAmount } from './Amount';
 export { default as Skeleton, SkeletonRows } from './Skeleton';
 export { default as Spinner } from './Spinner';

@@ -1,6 +1,15 @@
 import axios from 'axios';
 import config from '../config/env.js';
 
+/**
+ * The AI service's two server-to-server endpoints.
+ *
+ * The browser calls the AI service directly for the assistant and insights;
+ * these two are different. Categorisation and fraud scoring run *inside* the
+ * ledger's write path — a transaction cannot be created without them — so they
+ * stay a backend-to-backend dependency, authenticated with the shared secret
+ * rather than a user's token.
+ */
 const fastapiClient = axios.create({
     baseURL: config.FASTAPI_URL || 'http://localhost:8000',
     timeout: 12000,
@@ -75,26 +84,6 @@ export const checkFraud = async (newTransaction, history) => {
             error.message
         );
         return { risk_score: 0, risk_level: 'low', reason: 'Fraud check service unavailable.' };
-    }
-};
-
-export const getInsights = async (transactions) => {
-    try {
-        const data = await postWithRetry('/ai/insights', { transactions });
-        return data.insights ?? [];
-    } catch (error) {
-        console.error('FastAPI insights failed:', error.message);
-        return [];
-    }
-};
-
-export const getAssistantResponse = async (query, transactions) => {
-    try {
-        const data = await postWithRetry('/ai/assistant', { query, transactions });
-        return data.response;
-    } catch (error) {
-        console.error('FastAPI assistant failed:', error.message);
-        return 'I am currently unable to process your request due to a service connection error.';
     }
 };
 

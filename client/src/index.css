@@ -99,16 +99,82 @@
         to { background-position: -200% 0; }
     }
 
+    /* Distinct from `pp-shimmer` above on purpose: that one means "loading
+       placeholder" everywhere it's used. A premium surface (the balance
+       card's hairline) sweeping with the *same* animation would periodically
+       read as "this card is stuck loading" instead of as a flourish. */
+    @keyframes pp-shimmer-sweep {
+        0%   { transform: translateX(-120%); opacity: 0; }
+        8%   { opacity: 1; }
+        30%  { transform: translateX(320%); opacity: 0; }
+        100% { transform: translateX(320%); opacity: 0; }
+    }
+
+    /* FullScreenLoader's mark formation: blur/scale/opacity resolving into
+       place. One-shot (`both`, no iteration) — the sustained "system is
+       still working" read comes from the breathe/pulse/orbit loops below,
+       not from repeating this. */
+    @keyframes pp-loader-reveal {
+        0%   { opacity: 0; transform: scale(0.82); filter: blur(6px); }
+        60%  { opacity: 1; filter: blur(0); }
+        100% { opacity: 1; transform: scale(1); filter: blur(0); }
+    }
+
+    @keyframes pp-loader-breathe {
+        0%, 100% { opacity: 0.18; transform: scale(0.94); }
+        50%      { opacity: 0.32; transform: scale(1.06); }
+    }
+
+    /* Radiates outward from the mark's own footprint and fades — the "AI
+       system initializing" pulse. Two instances at a stagger (see
+       FullScreenLoader) read as a continuous wave rather than a single ring
+       repeating. */
+    @keyframes pp-loader-pulse-ring {
+        0%   { opacity: 0.45; transform: scale(0.85); }
+        100% { opacity: 0; transform: scale(1.65); }
+    }
+
+    @keyframes pp-loader-orbit {
+        to { transform: rotate(360deg); }
+    }
+
     .animate-fade-in { animation: pp-fade-in var(--duration-normal) var(--ease-out) both; }
     .animate-rise { animation: pp-rise var(--duration-normal) var(--ease-out) both; }
     .animate-sheet-up { animation: pp-sheet-up var(--duration-slow) var(--ease-out) both; }
     .animate-pop { animation: pp-pop var(--duration-slow) var(--ease-spring) both; }
+    /* Mostly-idle cycle (the sweep occupies ~30% of it) rather than
+       back-to-back: this card is on screen on every dashboard load, so a
+       constant sweep would feel restless under a number someone is reading. */
+    .animate-shimmer-sweep { animation: pp-shimmer-sweep 7s var(--ease-in-out) infinite; }
+
+    .animate-loader-reveal { animation: pp-loader-reveal 700ms var(--ease-spring) both; }
+    .animate-loader-breathe { animation: pp-loader-breathe 3.2s var(--ease-in-out) infinite; }
+    .animate-loader-pulse-ring { animation: pp-loader-pulse-ring 2.4s var(--ease-out) infinite; }
+    /* Linear, not eased: an orbit should read as a constant-speed satellite,
+       not something accelerating in and out. */
+    .animate-loader-orbit { animation: pp-loader-orbit 7s linear infinite; }
 
     /* Staggers a list without a JS animation library: each row reads its own
        index off a CSS variable set inline. */
     .stagger > * {
         animation: pp-rise var(--duration-normal) var(--ease-out) both;
         animation-delay: calc(var(--stagger-index, 0) * 40ms);
+    }
+
+    /* Magnetic pull for primary buttons. JS never writes `transform` directly
+       — it only sets `--magnet-x`/`--magnet-y`/`--magnet-scale` — so this
+       stays the single source of truth for the button's transform and can't
+       be silently overridden by an inline style on `:active`.
+       Deliberately does NOT declare its own `transition`: Button already
+       transitions `transform` (among other properties) via its own Tailwind
+       classes, and a second `transition` shorthand here would compete with
+       that one for the same CSS property, with the winner depending on
+       cascade/layer order rather than anything explicit. */
+    .btn-magnetic {
+        transform: translate(var(--magnet-x, 0px), var(--magnet-y, 0px)) scale(var(--magnet-scale, 1));
+    }
+    .btn-magnetic:active {
+        --magnet-scale: 0.98;
     }
 
     /* Skeletons sweep rather than pulse. A pulsing block reads as an error
@@ -127,6 +193,18 @@
     /* Applied to the tab bar and any bottom-anchored sheet so controls clear
        the iOS home indicator. */
     .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+
+    /* Brand gradient. Not a Tailwind-generated utility — v4 has no
+       `--gradient-*` theme namespace — so these are hand-written the same way
+       `.skeleton` is above. Reserved for primary CTAs, the balance card
+       hairline, and headline emphasis; never a full page background. */
+    .bg-gradient-brand { background-image: var(--gradient-brand); }
+    .text-gradient-brand {
+        background-image: var(--gradient-brand);
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+    }
 }
 
 /**

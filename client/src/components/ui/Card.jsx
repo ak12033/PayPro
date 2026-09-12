@@ -22,6 +22,13 @@ const VARIANTS = {
     raised: 'bg-surface border border-border shadow-raised',
     /** Pushed back — a well *inside* another card. */
     sunken: 'bg-surface-sunken border border-border',
+    /**
+     * Floating chrome — the balance card, auth forms, a hero panel. Reserved
+     * for the one or two surfaces per screen that should read as "elevated
+     * above everything else"; a dense list of these would cost every row a
+     * `backdrop-filter` and erase the hierarchy the effect is meant to signal.
+     */
+    glass: 'bg-surface-glass border border-border-glass backdrop-blur-xl shadow-overlay',
     /** No chrome at all; used to group without drawing a box. */
     bare: '',
 };

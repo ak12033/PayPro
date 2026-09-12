@@ -16,8 +16,15 @@ const NotFound = () => {
     const { isAuthenticated } = useAuth();
 
     return (
-        <div className="flex min-h-dvh items-center justify-center bg-canvas px-4">
-            <div className="w-full max-w-sm text-center">
+        <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-canvas px-4">
+            {/* A single blurred accent blob — the smallest possible dose of
+                the brand's glow language, not a scene. */}
+            <div
+                aria-hidden="true"
+                className="pointer-events-none absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent opacity-[0.08] blur-[100px]"
+            />
+
+            <div className="relative w-full max-w-sm text-center">
                 <p className="text-sm font-medium text-text-muted">404</p>
                 <h1 className="mt-2 text-xl font-semibold tracking-tight text-text">
                     Page not found

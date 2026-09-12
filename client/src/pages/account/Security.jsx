@@ -5,6 +5,7 @@ import PageHeader, { SectionHeading } from '../../components/layout/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import IconBadge from '../../components/ui/IconBadge';
 import { ConfirmSheet } from '../../components/ui/Sheet';
 import { SkeletonRows } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/feedback/EmptyState';
@@ -186,12 +187,7 @@ const Security = () => {
                                         key={session.id}
                                         className="flex items-center gap-3 px-2 py-3"
                                     >
-                                        <span
-                                            aria-hidden="true"
-                                            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-sunken text-text-secondary"
-                                        >
-                                            <DeviceIcon size={16} />
-                                        </span>
+                                        <IconBadge icon={<DeviceIcon size={16} />} tone="neutral" />
 
                                         <div className="min-w-0 flex-1">
                                             <div className="flex flex-wrap items-center gap-2">
@@ -266,12 +262,7 @@ const Security = () => {
 
                                     return (
                                         <li key={device.id} className="flex items-center gap-3 px-2 py-3">
-                                            <span
-                                                aria-hidden="true"
-                                                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface-sunken text-text-secondary"
-                                            >
-                                                <DeviceIcon size={16} />
-                                            </span>
+                                            <IconBadge icon={<DeviceIcon size={16} />} tone="neutral" />
 
                                             <div className="min-w-0 flex-1">
                                                 <div className="flex flex-wrap items-center gap-2">

@@ -24,12 +24,26 @@ const Sidebar = () => {
     const { pathname } = useLocation();
     const navigate = useNavigate();
 
+    /*
+     * The aside is pinned to the viewport while the page scrolls.
+     *
+     * `sticky` rather than `fixed`: the sidebar is a flex sibling of the content
+     * column, so sticky keeps its 15rem box in the flow and the content column
+     * keeps sizing itself off it. A fixed sidebar would be removed from the flow
+     * and the content column would then need a matching left offset — two
+     * numbers to keep in sync, and the usual source of a stray horizontal
+     * scrollbar when they drift apart.
+     *
+     * `h-dvh` overrides the flex stretch that would otherwise make this as tall
+     * as the whole document; `overflow-y-auto` only shows a scrollbar if the
+     * links ever outgrow the viewport, which today they do not.
+     */
     return (
-        <aside className="hidden w-60 shrink-0 border-r border-border bg-surface lg:flex lg:flex-col">
+        <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 overflow-y-auto border-r border-border bg-surface/95 backdrop-blur-md lg:flex lg:flex-col">
             <div className="flex h-16 items-center gap-2.5 px-5">
                 <span
                     aria-hidden="true"
-                    className="grid h-8 w-8 place-items-center rounded-control bg-accent text-on-accent"
+                    className="grid h-8 w-8 place-items-center rounded-control bg-gradient-brand text-on-accent"
                 >
                     <Sparkles size={17} />
                 </span>
@@ -68,7 +82,7 @@ const Sidebar = () => {
                                         'flex h-10 items-center gap-3 rounded-control px-3 text-sm font-medium',
                                         'transition-colors duration-[--duration-fast]',
                                         active
-                                            ? 'bg-accent-soft text-accent-text'
+                                            ? 'bg-accent-soft text-accent-text ring-1 ring-accent/20'
                                             : 'text-text-secondary hover:bg-surface-hover hover:text-text'
                                     )}
                                 >

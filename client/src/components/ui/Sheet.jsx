@@ -117,7 +117,7 @@ const Sheet = ({
             onKeyDown={handleKeyDown}
         >
             <div
-                className="absolute inset-0 bg-scrim animate-fade-in"
+                className="absolute inset-0 bg-scrim backdrop-blur-sm animate-fade-in"
                 onClick={dismissible ? onClose : undefined}
                 aria-hidden="true"
             />
@@ -129,7 +129,7 @@ const Sheet = ({
                 aria-label={title}
                 tabIndex={-1}
                 className={cn(
-                    'relative flex w-full flex-col bg-overlay shadow-overlay outline-none',
+                    'relative flex w-full flex-col bg-surface-glass backdrop-blur-xl border border-border-glass shadow-overlay outline-none',
                     // Rounded top only on mobile, where it reads as a sheet
                     // rising from the bottom edge.
                     'max-h-[92dvh] rounded-t-panel sm:max-h-[85dvh] sm:rounded-panel',
@@ -225,8 +225,8 @@ export const ConfirmSheet = ({
 const ConfirmButton = ({ variant, loading, onClick, children }) => {
     const tone =
         variant === 'danger'
-            ? 'bg-danger text-white hover:opacity-90'
-            : 'bg-accent text-on-accent hover:bg-accent-hover';
+            ? 'bg-danger text-on-danger shadow-raised hover:opacity-90'
+            : 'bg-gradient-brand text-on-accent shadow-glow-accent hover:brightness-110';
 
     return (
         <button
@@ -235,7 +235,7 @@ const ConfirmButton = ({ variant, loading, onClick, children }) => {
             disabled={loading}
             aria-busy={loading || undefined}
             className={cn(
-                'h-11 rounded-control px-5 text-sm font-medium shadow-raised disabled:opacity-45',
+                'h-11 rounded-control px-5 text-sm font-medium disabled:opacity-45',
                 tone
             )}
         >

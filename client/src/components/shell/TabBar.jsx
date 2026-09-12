@@ -40,7 +40,7 @@ const TabBar = () => {
                                 className={cn(
                                     'flex min-h-14 flex-col items-center justify-center gap-1 px-1 pt-2',
                                     'transition-colors duration-[--duration-fast]',
-                                    active ? 'text-accent' : 'text-text-muted'
+                                    active ? 'text-accent-text' : 'text-text-muted'
                                 )}
                             >
                                 {/* The active pill sits behind the icon rather than

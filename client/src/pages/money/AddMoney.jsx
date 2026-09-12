@@ -5,8 +5,10 @@ import PageHeader from '../../components/layout/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Amount from '../../components/ui/Amount';
+import IconBadge from '../../components/ui/IconBadge';
 import { AmountInput, Field } from '../../components/ui/Field';
 import { DetailRow } from '../../components/ui/List';
+import WalletCard from '../../features/wallet/WalletCard';
 import { useAuth } from '../../context/AuthContext';
 import { paymentApi } from '../../services/api/endpoints/paymentApi';
 import { getErrorMessage } from '../../utils/errors';
@@ -47,7 +49,7 @@ import cn from '../../lib/cn';
  */
 const AddMoney = () => {
     const navigate = useNavigate();
-    const { balance, fetchDashboardData } = useAuth();
+    const { userName, balance, fetchDashboardData } = useAuth();
 
     const [amount, setAmount] = useState('');
     const [loading, setLoading] = useState(false);
@@ -180,12 +182,13 @@ const AddMoney = () => {
     if (result?.status === 'success') {
         return (
             <div className="mx-auto max-w-md py-6 text-center">
-                <span
-                    aria-hidden="true"
-                    className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-positive-soft text-positive animate-pop"
-                >
-                    <CheckCircle2 size={32} />
-                </span>
+                <IconBadge
+                    icon={<CheckCircle2 size={32} />}
+                    tone="positive"
+                    size="xl"
+                    pulse
+                    className="mx-auto"
+                />
 
                 <div role="status">
                     <h1 className="mt-4 text-xl font-semibold text-text">Money added</h1>
@@ -212,6 +215,8 @@ const AddMoney = () => {
     return (
         <div className="mx-auto max-w-md">
             <PageHeader title="Add money" back={ROUTES.HOME} />
+
+            <WalletCard userName={userName} balance={balance} className="mb-5" />
 
             <div className="space-y-4">
                 <Field label="Amount" hint={`Current balance: ${formatCurrency(balance)}`}>

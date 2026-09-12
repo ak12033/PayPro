@@ -16,9 +16,25 @@ export const RAZORPAY_CHECKOUT_URL = 'https://checkout.razorpay.com/v1/checkout.
  * best we can do is hand it a colour that matches the app. It is read at call
  * time from the live theme rather than hardcoded, so the payment sheet does not
  * arrive as a dark slab in the middle of a light-themed session.
+ *
+ * Resolved off the computed token rather than a literal. The previous literal
+ * was `#2563eb` — the blue the product used *before* the palette moved to
+ * cyan, which is exactly the failure mode a duplicated colour has: the theme
+ * moved and the checkout sheet stayed behind, so the one screen where a user
+ * hands over card details was the one screen that looked like a different app.
  */
-export const getRazorpayThemeColor = () =>
-    document.documentElement.getAttribute('data-theme') === 'dark' ? '#121923' : '#2563eb';
+export const getRazorpayThemeColor = () => {
+    const styles = getComputedStyle(document.documentElement);
+    const token =
+        document.documentElement.getAttribute('data-theme') === 'dark'
+            ? '--color-surface'
+            : '--color-accent';
+
+    // Razorpay rejects anything that is not a hex string, and a token could in
+    // principle resolve to empty if the sheet has not parsed yet.
+    const value = styles.getPropertyValue(token).trim();
+    return /^#[0-9a-f]{3,8}$/i.test(value) ? value : '#0e7490';
+};
 
 /**
  * Payment lifecycle, as Razorpay reports it.

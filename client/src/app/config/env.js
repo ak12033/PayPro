@@ -11,6 +11,9 @@ const readEnv = (key, fallback = '') => import.meta.env[key] ?? fallback;
 export const env = {
     backendUrl: readEnv('VITE_BACKEND_URL', 'http://localhost:5000'),
 
+    /** The AI service. The browser calls it directly for AI features. */
+    aiUrl: readEnv('VITE_FASTAPI_URL', 'http://localhost:8000'),
+
     razorpayKeyId: readEnv('VITE_RAZORPAY_KEY_ID'),
 
     firebase: {
@@ -25,3 +28,6 @@ export const env = {
 };
 
 export const API_BASE_URL = `${env.backendUrl}/api`;
+
+/** No `/api` prefix — the AI service serves its routes at the root. */
+export const AI_BASE_URL = env.aiUrl;

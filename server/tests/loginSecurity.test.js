@@ -23,8 +23,6 @@ vi.mock('../utils/sendOtp.js', () => ({ default: vi.fn().mockResolvedValue(undef
 vi.mock('../utils/fastapiClient.js', () => ({
     categorizeTransaction: vi.fn().mockResolvedValue({ category: 'Others', icon: 'CircleDollarSign', confidence_score: 0 }),
     checkFraud: vi.fn().mockResolvedValue({ risk_score: 0, risk_level: 'low', reason: 'test' }),
-    getInsights: vi.fn().mockResolvedValue([]),
-    getAssistantResponse: vi.fn().mockResolvedValue('ok'),
     default: {},
 }));
 

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { CURRENCY_LOCALE, CURRENCY_SYMBOL } from '../../constants/app';
+import { DIMMED_OPACITY, HOVER_BRIGHTNESS, VIZ_SERIES } from '../../lib/chartTheme';
 
 /**
  * Volume breakdown.
@@ -13,20 +14,28 @@ import { CURRENCY_LOCALE, CURRENCY_SYMBOL } from '../../constants/app';
  *
  * Colour choices are deliberate and not decorative:
  *
- *   - The three series use the semantic money tokens (negative / positive /
- *     accent), so the chart agrees with every amount elsewhere in the product
- *     about what "money out" looks like.
+ *   - The three slices take the shared visualization ramp, so this donut and
+ *     the dashboard's category donut are visibly the same chart system. They
+ *     were previously the semantic money tokens (negative / positive /
+ *     accent). That is the right call for a *ledger*, where a debit must look
+ *     like a debit — but this is a composition-of-volume chart, where the
+ *     three parts are categories of movement rather than gains and losses,
+ *     and none of them is a state the reader must be warned about. Slots are
+ *     spread across the ramp (1, 4, 2) rather than taken in sequence, so the
+ *     three wedges land far apart in lightness.
  *   - Every slice is also labelled in the legend with its percentage, so the
  *     chart is readable without distinguishing the colours at all. A donut
  *     whose meaning lives only in hue excludes roughly 1 in 12 men.
  *   - Colours come from CSS variables, so the chart re-themes with the app
- *     instead of staying light-mode red on a dark canvas.
+ *     instead of keeping light-mode values on a dark canvas.
  */
 const SpendingChart = ({ sent = 0, received = 0, added = 0 }) => {
+    const [activeIndex, setActiveIndex] = useState(null);
+
     const series = [
-        { name: 'Sent', value: Number(sent) || 0, token: 'var(--color-negative)' },
-        { name: 'Received', value: Number(received) || 0, token: 'var(--color-positive)' },
-        { name: 'Added', value: Number(added) || 0, token: 'var(--color-accent)' },
+        { name: 'Sent', value: Number(sent) || 0, token: VIZ_SERIES[0] },
+        { name: 'Received', value: Number(received) || 0, token: VIZ_SERIES[3] },
+        { name: 'Added', value: Number(added) || 0, token: VIZ_SERIES[1] },
     ];
 
     const total = series.reduce((sum, item) => sum + item.value, 0);
@@ -68,10 +77,30 @@ const SpendingChart = ({ sent = 0, received = 0, added = 0 }) => {
                             // re-render otherwise, which on a page with a live
                             // balance means it spins whenever anything updates.
                             isAnimationActive={false}
+                            // Same hover language as the dashboard's category
+                            // donut: the hovered wedge brightens by the button's
+                            // own factor and the rest recede, rather than the
+                            // wedge changing to a different colour.
+                            onMouseEnter={(_, index) => setActiveIndex(index)}
+                            onMouseLeave={() => setActiveIndex(null)}
                         >
-                            {series.map((item) => (
-                                <Cell key={item.name} fill={item.token} />
-                            ))}
+                            {series.map((item, index) => {
+                                const isActive = activeIndex === index;
+                                const isDimmed = activeIndex !== null && !isActive;
+
+                                return (
+                                    <Cell
+                                        key={item.name}
+                                        fill={item.token}
+                                        style={{
+                                            filter: isActive ? `brightness(${HOVER_BRIGHTNESS})` : 'none',
+                                            opacity: isDimmed ? DIMMED_OPACITY : 1,
+                                            transition:
+                                                'opacity var(--duration-fast) var(--ease-out), filter var(--duration-fast) var(--ease-out)',
+                                        }}
+                                    />
+                                );
+                            })}
                         </Pie>
                         <Tooltip content={<ChartTooltip total={total} />} />
                     </PieChart>

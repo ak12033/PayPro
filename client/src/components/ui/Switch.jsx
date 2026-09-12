@@ -67,6 +67,13 @@ const Switch = ({
                 >
                     <span
                         className={cn(
+                            // One of the few literals left on purpose. The knob
+                            // has to read against *both* of its tracks — the
+                            // accent when checked and `border-strong` when not
+                            // — so it cannot follow the theme: any token that
+                            // inverts for dark mode makes the unchecked knob
+                            // disappear into its own track. A constant white
+                            // puck is also what every platform switch does.
                             'grid h-5 w-5 place-items-center rounded-full bg-white shadow-raised',
                             'transition-transform duration-[--duration-fast] ease-[--ease-out]',
                             checked && 'translate-x-5'

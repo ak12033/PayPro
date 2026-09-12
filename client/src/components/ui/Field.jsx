@@ -80,7 +80,17 @@ const CONTROL_BASE = cn(
     'disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-text-muted',
     // aria-invalid drives the error styling, so the visual state and the
     // accessible state cannot drift apart.
-    'border-border aria-[invalid=true]:border-danger'
+    'border-border aria-[invalid=true]:border-danger',
+    // The bare control had no focused appearance of its own — it relied
+    // entirely on the global `:focus-visible` outline, so a *pointer* user
+    // clicking into it saw the field not react at all, while the prefixed
+    // variant below did tint. Same accent border on both now, and it yields
+    // to the danger border when the field is invalid.
+    //
+    // Border only: the outline is the global one from index.css, and
+    // `focus:outline-none` here is exactly the mistake that comment warns
+    // about.
+    'focus:border-accent aria-[invalid=true]:focus:border-danger'
 );
 
 /** Single-line text input. */

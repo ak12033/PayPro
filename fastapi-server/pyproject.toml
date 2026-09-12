@@ -1,0 +1,31 @@
+# Tooling configuration only.
+#
+# Deliberately NOT a packaging manifest: this service is deployed by copying
+# `app/` into the image (see Dockerfile), not by `pip install`-ing itself, and
+# dependency management stays in requirements.txt / requirements-dev.txt with a
+# plain `.venv`. No Poetry/uv/Pipenv is involved.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `tests/` is not a package, so pytest would otherwise put tests/ on sys.path
+# instead of the project root and `import app.main` would fail.
+pythonpath = ["."]
+addopts = "-q"
+asyncio_mode = "strict"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = [".venv", "venv", "__pycache__"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I import sorting, B bugbear, UP pyupgrade.
+select = ["E", "W", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# The prompt strings and Field(description=...) lines are long by nature and
+# wrapping them would change the text sent to the model.
+"app/services/scoring.py" = ["E501"]
+"app/services/insights.py" = ["E501"]
+"app/services/assistant.py" = ["E501"]
+"app/schemas/ai.py" = ["E501"]

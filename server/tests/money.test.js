@@ -10,8 +10,6 @@ vi.mock('../utils/sendOtp.js', () => ({ default: vi.fn().mockResolvedValue(undef
 vi.mock('../utils/fastapiClient.js', () => ({
     categorizeTransaction: vi.fn().mockResolvedValue({ category: 'Others', icon: 'CircleDollarSign', confidence_score: 0 }),
     checkFraud: vi.fn().mockResolvedValue({ risk_score: 0, risk_level: 'low', reason: 'test' }),
-    getInsights: vi.fn().mockResolvedValue([]),
-    getAssistantResponse: vi.fn().mockResolvedValue('ok'),
     default: {},
 }));
 vi.mock('../utils/socket.js', () => ({
@@ -261,6 +259,82 @@ describe('POST /api/transactions/add', () => {
 
         expect(res.status).toBe(400);
         expect((await User.findById(alice.id)).accountBalance).toBe(500);
+    });
+});
+
+describe('GET /api/transactions/recent-recipients', () => {
+    let alice; let bob; let carol;
+
+    const transfer = (from, toId, amount) =>
+        request(app).post('/api/transactions/transfer')
+            .set(auth(from.token))
+            .send({ recipientId: toId, amount });
+
+    beforeEach(async () => {
+        alice = await signup('alice@example.com');
+        bob = await signup('bob@example.com');
+        carol = await signup('carol@example.com');
+        await fund(alice.id, 5000);
+    });
+
+    it('requires authentication', async () => {
+        const res = await request(app).get('/api/transactions/recent-recipients');
+        expect(res.status).toBe(401);
+    });
+
+    it('is empty for a user who has never sent money', async () => {
+        const res = await request(app).get('/api/transactions/recent-recipients')
+            .set(auth(alice.token));
+
+        expect(res.status).toBe(200);
+        expect(res.body.recipients).toEqual([]);
+    });
+
+    it('returns each recipient once, most recently paid first', async () => {
+        await transfer(alice, bob.id, 100);
+        await transfer(alice, carol.id, 100);
+        // Paying Bob again should move him to the front, not add a duplicate.
+        await transfer(alice, bob.id, 50);
+
+        const res = await request(app).get('/api/transactions/recent-recipients')
+            .set(auth(alice.token));
+
+        expect(res.status).toBe(200);
+        expect(res.body.recipients).toHaveLength(2);
+        expect(res.body.recipients.map((r) => r._id)).toEqual([bob.id, carol.id]);
+        expect(res.body.recipients[0].lastAmount).toBe(50);
+    });
+
+    it("never exposes another user's recipients", async () => {
+        await transfer(alice, bob.id, 100);
+
+        const res = await request(app).get('/api/transactions/recent-recipients')
+            .set(auth(carol.token));
+
+        expect(res.status).toBe(200);
+        expect(res.body.recipients).toEqual([]);
+    });
+
+    it('omits a recipient whose account no longer exists', async () => {
+        await transfer(alice, bob.id, 100);
+        await transfer(alice, carol.id, 100);
+        await User.deleteOne({ _id: bob.id });
+
+        const res = await request(app).get('/api/transactions/recent-recipients')
+            .set(auth(alice.token));
+
+        expect(res.status).toBe(200);
+        expect(res.body.recipients.map((r) => r._id)).toEqual([carol.id]);
+    });
+
+    it('caps the limit rather than trusting the query string', async () => {
+        await transfer(alice, bob.id, 100);
+
+        const res = await request(app).get('/api/transactions/recent-recipients?limit=9999')
+            .set(auth(alice.token));
+
+        expect(res.status).toBe(200);
+        expect(res.body.recipients.length).toBeLessThanOrEqual(10);
     });
 });
 

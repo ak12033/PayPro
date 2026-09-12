@@ -5,6 +5,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import Card from '../../components/ui/Card';
 import Amount from '../../components/ui/Amount';
 import Skeleton from '../../components/ui/Skeleton';
+import IconBadge from '../../components/ui/IconBadge';
 import { useAuth } from '../../context/AuthContext';
 import { ROUTES } from '../../constants/routes';
 
@@ -27,7 +28,7 @@ const MoneyHub = () => {
         <div className="mx-auto max-w-2xl">
             <PageHeader title="Money" />
 
-            <Card variant="raised" className="mb-4">
+            <Card variant="glass" className="mb-4">
                 <p className="text-sm text-text-muted">Available balance</p>
                 <div className="mt-1 min-h-10">
                     {isCheckingAuth ? (
@@ -85,16 +86,7 @@ const MoneyHub = () => {
 const ActionCard = ({ to, icon: Icon, title, description, tone }) => (
     <Link to={to} className="block">
         <Card className="h-full transition-colors hover:bg-surface-hover">
-            <span
-                aria-hidden="true"
-                className={
-                    tone === 'accent'
-                        ? 'grid h-10 w-10 place-items-center rounded-full bg-accent-soft text-accent-text'
-                        : 'grid h-10 w-10 place-items-center rounded-full bg-positive-soft text-positive'
-                }
-            >
-                <Icon size={19} />
-            </span>
+            <IconBadge icon={<Icon size={19} />} tone={tone} />
             <p className="mt-3 text-base font-semibold text-text">{title}</p>
             <p className="mt-1 text-sm leading-6 text-text-muted">{description}</p>
         </Card>

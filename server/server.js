@@ -15,8 +15,8 @@ import authRouter from './routes/authRoutes.js';
 import paymentRouter from './routes/paymentRoutes.js';
 import transactionRouter from './routes/transactionRoutes.js';
 import notificationRouter from './routes/notificationRoutes.js';
-import aiRouter from './routes/aiRoutes.js';
 import securityRouter from './routes/securityRoutes.js';
+import analyticsRouter from './routes/analyticsRoutes.js';
 import { startCronJobs, stopCronJobs } from './utils/cron.js';
 import { initSocket } from './utils/socket.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
@@ -154,8 +154,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/transactions', transactionRouter);
 app.use('/api/payments', paymentRouter);
 app.use('/api/notifications', notificationRouter);
-app.use('/api/ai', aiRouter);
 app.use('/api/security', securityRouter);
+app.use('/api/analytics', analyticsRouter);
 
 // Must come after all routes.
 app.use(notFoundHandler);

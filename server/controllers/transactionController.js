@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import Transaction from '../models/Transaction.js';
 import User from '../models/User.js';
 import Otp, { OTP_TTL_MS } from '../models/Otp.js';
-import { categorizeTransaction, checkFraud, getInsights, getAssistantResponse } from '../utils/fastapiClient.js';
+import { categorizeTransaction, checkFraud } from '../utils/fastapiClient.js';
 import sendOtp from '../utils/sendOtp.js';
 import { notifyUser } from '../services/notificationService.js';
 import { emitToUser } from '../utils/socket.js';
@@ -213,57 +213,75 @@ export const addTransaction = asyncHandler(async (req, res) => {
     });
 });
 
+/**
+ * Named presets for the history page's filter chips.
+ *
+ * The UI has always sent `?filter=Transfer|Received|Payment|All`, but no
+ * version of this handler ever read a `filter` parameter — it only looked
+ * at `type` and `category`. The chips therefore did nothing at all: every
+ * one of them returned the identical unfiltered list, and the "Current
+ * filter" label on the page reported a filter that was never applied.
+ *
+ * Presets are resolved server-side so the meaning of "Payment" lives in one
+ * place rather than being re-derived by each client. Shared with the CSV
+ * export below so a filtered export can't silently diverge from what the
+ * screen it was exported from actually shows.
+ */
+const HISTORY_FILTER_PRESETS = {
+    Transfer: { type: 'Debit', category: 'Transfer' },
+    Received: { type: 'Credit', category: 'Transfer' },
+    TopUp: { type: 'Credit', category: { $in: ['Top Up', 'Stripe'] } },
+    Payment: { type: 'Debit', category: { $nin: ['Transfer', 'Refund'] } },
+    Refund: { category: 'Refund' },
+};
+
+/**
+ * Every filter below is allow-listed or coerced to a primitive. Passing
+ * req.query values straight into a Mongoose filter let a caller send
+ * `?type[$ne]=Debit` and rewrite the query's meaning.
+ */
+const buildHistoryFilter = (userId, query) => {
+    const filter = { userId: new mongoose.Types.ObjectId(userId) };
+
+    const search = asString(query.search, { maxLength: 100 });
+    if (search) {
+        // Escaped: an unescaped user regex is both a ReDoS vector and a way to
+        // widen the filter (e.g. `.*`).
+        filter.description = { $regex: escapeRegex(search), $options: 'i' };
+    }
+
+    const type = asEnum(query.type, ['Credit', 'Debit']);
+    if (type) filter.type = type;
+
+    const category = asString(query.category, { maxLength: 60 });
+    if (category) filter.category = category;
+
+    const preset = asEnum(query.filter, Object.keys(HISTORY_FILTER_PRESETS));
+    if (preset) {
+        // Explicit `type`/`category` params win over the preset.
+        for (const [key, value] of Object.entries(HISTORY_FILTER_PRESETS[preset])) {
+            if (filter[key] === undefined) filter[key] = value;
+        }
+    }
+
+    const start = asString(query.startDate) ? new Date(query.startDate) : null;
+    const end = asString(query.endDate) ? new Date(query.endDate) : null;
+    const validStart = start && !Number.isNaN(start.getTime());
+    const validEnd = end && !Number.isNaN(end.getTime());
+    if (validStart || validEnd) {
+        filter.createdAt = {};
+        if (validStart) filter.createdAt.$gte = start;
+        if (validEnd) filter.createdAt.$lte = end;
+    }
+
+    return filter;
+};
+
 export const getPaginatedTransactions = asyncHandler(async (req, res) => {
     const page = asInt(req.query.page, { min: 1, max: 100000, fallback: 1 });
     const limit = asInt(req.query.limit, { min: 1, max: 100, fallback: 10 });
 
-    const query = { userId: new mongoose.Types.ObjectId(req.user.id) };
-
-    /**
-     * Every filter below is allow-listed or coerced to a primitive. Passing
-     * req.query values straight into a Mongoose filter let a caller send
-     * `?type[$ne]=Debit` and rewrite the query's meaning.
-     */
-    const search = asString(req.query.search, { maxLength: 100 });
-    if (search) {
-        // Escaped: an unescaped user regex is both a ReDoS vector and a way to
-        // widen the filter (e.g. `.*`).
-        query.description = { $regex: escapeRegex(search), $options: 'i' };
-    }
-
-    const type = asEnum(req.query.type, ['Credit', 'Debit']);
-    if (type) query.type = type;
-
-    const category = asString(req.query.category, { maxLength: 60 });
-    if (category) query.category = category;
-
-    /**
-     * Named presets for the history page's filter chips.
-     *
-     * The UI has always sent `?filter=Transfer|Received|Payment|All`, but no
-     * version of this handler ever read a `filter` parameter — it only looked
-     * at `type` and `category`. The chips therefore did nothing at all: every
-     * one of them returned the identical unfiltered list, and the "Current
-     * filter" label on the page reported a filter that was never applied.
-     *
-     * Presets are resolved server-side so the meaning of "Payment" lives in one
-     * place rather than being re-derived by each client.
-     */
-    const PRESETS = {
-        Transfer: { type: 'Debit', category: 'Transfer' },
-        Received: { type: 'Credit', category: 'Transfer' },
-        TopUp: { type: 'Credit', category: { $in: ['Top Up', 'Stripe'] } },
-        Payment: { type: 'Debit', category: { $nin: ['Transfer', 'Refund'] } },
-        Refund: { category: 'Refund' },
-    };
-
-    const preset = asEnum(req.query.filter, Object.keys(PRESETS));
-    if (preset) {
-        // Explicit `type`/`category` params win over the preset.
-        for (const [key, value] of Object.entries(PRESETS[preset])) {
-            if (query[key] === undefined) query[key] = value;
-        }
-    }
+    const query = buildHistoryFilter(req.user.id, req.query);
 
     const minAmount = req.query.minAmount !== undefined ? Number(req.query.minAmount) : NaN;
     const maxAmount = req.query.maxAmount !== undefined ? Number(req.query.maxAmount) : NaN;
@@ -271,16 +289,6 @@ export const getPaginatedTransactions = asyncHandler(async (req, res) => {
         query.amount = {};
         if (Number.isFinite(minAmount)) query.amount.$gte = minAmount;
         if (Number.isFinite(maxAmount)) query.amount.$lte = maxAmount;
-    }
-
-    const start = asString(req.query.startDate) ? new Date(req.query.startDate) : null;
-    const end = asString(req.query.endDate) ? new Date(req.query.endDate) : null;
-    const validStart = start && !Number.isNaN(start.getTime());
-    const validEnd = end && !Number.isNaN(end.getTime());
-    if (validStart || validEnd) {
-        query.createdAt = {};
-        if (validStart) query.createdAt.$gte = start;
-        if (validEnd) query.createdAt.$lte = end;
     }
 
     // Allow-listed sort fields: an arbitrary `sortBy` lets a caller sort on an
@@ -303,31 +311,6 @@ export const getPaginatedTransactions = asyncHandler(async (req, res) => {
         currentPage: page,
         totalPages: Math.max(1, Math.ceil(total / limit)),
     });
-});
-
-export const getAiInsights = asyncHandler(async (req, res) => {
-    const transactions = await Transaction.find({ userId: req.user.id })
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .select('description amount type category createdAt -_id')
-        .lean();
-
-    const insights = await getInsights(transactions);
-    res.status(200).json({ insights });
-});
-
-export const askAiAssistant = asyncHandler(async (req, res) => {
-    const query = asString(req.body?.query, { maxLength: 2000 });
-    if (!query) return res.status(400).json({ message: 'Query is required' });
-
-    const transactions = await Transaction.find({ userId: req.user.id })
-        .sort({ createdAt: -1 })
-        .limit(20)
-        .select('description amount type category createdAt -_id')
-        .lean();
-
-    const response = await getAssistantResponse(query, transactions);
-    res.status(200).json({ response });
 });
 
 /**
@@ -568,6 +551,69 @@ export const getTransactions = asyncHandler(async (req, res) => {
 });
 
 /**
+ * The people this wallet has most recently sent money to.
+ *
+ * Exists because choosing a recipient was previously always a search: even
+ * paying the same person every week meant typing their name from scratch.
+ *
+ * Recency, not volume, is the ordering. `/analytics/network` already ranks top
+ * recipients by total sent, which answers "who do I send the most to" — the
+ * wrong question for a shortcut whose whole purpose is "do that again".
+ *
+ * Grouped in the database rather than by fetching N transactions and
+ * de-duplicating in JS: a user who paid one person twenty times in a row would
+ * otherwise produce a single shortcut out of a twenty-row fetch.
+ */
+export const getRecentRecipients = asyncHandler(async (req, res) => {
+    const limit = asInt(req.query.limit, { min: 1, max: 10, fallback: 5 });
+
+    const contacts = await Transaction.aggregate([
+        {
+            $match: {
+                userId: new mongoose.Types.ObjectId(req.user.id),
+                type: 'Debit',
+                category: 'Transfer',
+                recipientId: { $ne: null },
+            },
+        },
+        { $sort: { createdAt: -1 } },
+        {
+            $group: {
+                _id: '$recipientId',
+                lastSentAt: { $first: '$createdAt' },
+                lastAmount: { $first: '$amount' },
+            },
+        },
+        { $sort: { lastSentAt: -1 } },
+        { $limit: limit },
+    ]);
+
+    // A recipient who has since deleted their account must not surface as a
+    // tappable shortcut that fails at transfer time, so the join filters them
+    // out rather than back-filling an "Unknown" placeholder.
+    const users = await User.find({ _id: { $in: contacts.map((c) => c._id) } })
+        .select('firstName lastName')
+        .lean();
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+    const recipients = contacts
+        .map((c) => {
+            const user = userMap.get(String(c._id));
+            if (!user) return null;
+            return {
+                _id: String(c._id),
+                firstName: user.firstName,
+                lastName: user.lastName,
+                lastSentAt: c.lastSentAt,
+                lastAmount: c.lastAmount,
+            };
+        })
+        .filter(Boolean);
+
+    res.status(200).json({ recipients });
+});
+
+/**
  * Escape a value for CSV.
  *
  * Two distinct concerns:
@@ -597,20 +643,11 @@ const csvCell = (value) => {
  * memory before the first byte reached the client.
  */
 export const exportTransactionsCsv = asyncHandler(async (req, res) => {
-    const query = { userId: new mongoose.Types.ObjectId(req.user.id) };
-
-    const type = asEnum(req.query.type, ['Credit', 'Debit']);
-    if (type) query.type = type;
-
-    const start = asString(req.query.startDate) ? new Date(req.query.startDate) : null;
-    const end = asString(req.query.endDate) ? new Date(req.query.endDate) : null;
-    const validStart = start && !Number.isNaN(start.getTime());
-    const validEnd = end && !Number.isNaN(end.getTime());
-    if (validStart || validEnd) {
-        query.createdAt = {};
-        if (validStart) query.createdAt.$gte = start;
-        if (validEnd) query.createdAt.$lte = end;
-    }
+    // Same filter builder as the history list, so "export" always means
+    // "export what I'm currently looking at" — previously this accepted only
+    // `type`/`startDate`/`endDate` and silently dropped the active preset,
+    // category and search, so a filtered export downloaded the whole ledger.
+    const query = buildHistoryFilter(req.user.id, req.query);
 
     const stamp = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');

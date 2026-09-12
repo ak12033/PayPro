@@ -31,8 +31,14 @@
       Updated by ThemeProvider on every theme change so the browser chrome —
       the status bar on iOS, the address bar on Android — matches the app
       surface instead of staying white above a dark page.
+
+      The literal is `--color-canvas`'s light value. It has to be a literal
+      here: this element is parsed before the stylesheet exists, so there is no
+      computed token to read. ThemeProvider reads the real token once React
+      mounts, so this value only governs the first few milliseconds — but it
+      still has to match tokens.css, or the status bar visibly shifts on load.
     -->
-    <meta name="theme-color" content="#f6f8fa" />
+    <meta name="theme-color" content="#f4f7f9" />
 
     <!--
       Theme, applied before first paint.
@@ -58,8 +64,10 @@
 
           document.documentElement.setAttribute('data-theme', resolved);
 
+          // Same constraint as the meta tag above: pre-stylesheet, so these
+          // are `--color-canvas`'s two values written out by hand.
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0b1017' : '#f6f8fa');
+          if (meta) meta.setAttribute('content', resolved === 'dark' ? '#07090e' : '#f4f7f9');
         } catch (e) {
           // Private-mode Safari throws on localStorage; the light default stands.
           document.documentElement.setAttribute('data-theme', 'light');

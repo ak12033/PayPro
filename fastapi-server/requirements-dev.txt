@@ -1,0 +1,17 @@
+# ─────────────────────────────────────────────────────────────
+# PayPro AI service — development dependencies
+#
+# Installs the runtime set too, so one command sets up a dev environment:
+#   pip install -r requirements-dev.txt
+# ─────────────────────────────────────────────────────────────
+
+-r requirements.txt
+
+# Test runner. The suite uses fastapi.testclient, which requires httpx.
+pytest==8.4.2
+pytest-asyncio==1.3.0
+httpx==0.28.1
+
+# Lint + format. Configured in pyproject.toml; ruff replaces black+flake8 here
+# rather than adding a third tool for a codebase this size.
+ruff==0.15.4

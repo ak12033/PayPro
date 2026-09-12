@@ -12,6 +12,7 @@ COPY . .
 # Vite inlines VITE_* at BUILD time, not run time — so these must be present
 # here, and a change to any of them requires a rebuild, not just a restart.
 ARG VITE_BACKEND_URL
+ARG VITE_FASTAPI_URL
 ARG VITE_RAZORPAY_KEY_ID
 ARG VITE_FIREBASE_API_KEY
 ARG VITE_FIREBASE_AUTH_DOMAIN

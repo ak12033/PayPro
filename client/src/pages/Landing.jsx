@@ -2,6 +2,9 @@ import React, { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Lock, Sparkles, Zap } from 'lucide-react';
 import Button from '../components/ui/Button';
+import IconBadge from '../components/ui/IconBadge';
+import NetworkMesh from '../components/ui/NetworkMesh';
+import AmbientGlow from '../components/ui/AmbientGlow';
 import { useAuth } from '../context/AuthContext';
 import { ROUTES, HOME_ROUTE } from '../constants/routes';
 import { APP_NAME } from '../constants/app';
@@ -33,7 +36,7 @@ const Landing = () => {
                 <div className="flex items-center gap-2">
                     <span
                         aria-hidden="true"
-                        className="grid h-8 w-8 place-items-center rounded-control bg-accent text-on-accent"
+                        className="grid h-8 w-8 place-items-center rounded-control bg-gradient-brand text-on-accent"
                     >
                         <Sparkles size={17} />
                     </span>
@@ -49,9 +52,22 @@ const Landing = () => {
                 </Link>
             </header>
 
-            <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-12 text-center">
+            <main className="relative mx-auto flex w-full max-w-md flex-1 flex-col justify-center overflow-hidden py-12 text-center">
+                {/* Contained to the hero, not the whole page — a decorative
+                    backdrop is not worth drawing behind content someone is
+                    trying to read. */}
+                <div className="absolute inset-0 -z-10">
+                    <NetworkMesh density="normal" />
+                    <AmbientGlow />
+                </div>
+
+                <div className="mx-auto mb-5 inline-flex items-center gap-2 self-center rounded-pill border border-border-glass bg-surface-glass px-3 py-1 text-2xs font-medium text-text-secondary backdrop-blur-md">
+                    <span className="h-1.5 w-1.5 rounded-full bg-positive" aria-hidden="true" />
+                    {APP_NAME} is live
+                </div>
+
                 <h1 className="text-2xl font-semibold tracking-tight text-text sm:text-3xl">
-                    Money that moves when you do
+                    Money that <span className="text-gradient-brand">moves when you do</span>
                 </h1>
                 <p className="mx-auto mt-3 max-w-sm text-base leading-7 text-text-secondary">
                     Send, receive and track your money in one place. No queues, no paperwork.
@@ -97,12 +113,7 @@ const Landing = () => {
 
 const Feature = ({ icon: Icon, title, description }) => (
     <li className="flex gap-3">
-        <span
-            aria-hidden="true"
-            className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-text"
-        >
-            <Icon size={16} />
-        </span>
+        <IconBadge icon={<Icon size={16} />} size="sm" className="mt-0.5" />
         <span>
             <span className="block text-sm font-medium text-text">{title}</span>
             <span className="mt-0.5 block text-sm leading-6 text-text-muted">{description}</span>
