@@ -16,7 +16,7 @@ uvicorn[standard]==0.52.4
 
 # Request/response validation for every route in app/schemas/ai.py, and the
 # response_schema passed to Gemini.
-pydantic==2.13.4
+pydantic==2.13.5
 
 # Gemini client used by app/services/gemini.py.
 google-genai==2.19.0
