@@ -12,7 +12,7 @@
 # Web framework + ASGI server. [standard] pulls in uvloop/httptools/watchfiles,
 # which provide the --reload used in development.
 fastapi==0.141.1
-uvicorn[standard]==0.52.4
+uvicorn[standard]==0.53.0
 
 # Request/response validation for every route in app/schemas/ai.py, and the
 # response_schema passed to Gemini.
