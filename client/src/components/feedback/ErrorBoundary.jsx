@@ -1,5 +1,6 @@
 import React from 'react';
 import { ROUTES } from '../../constants/routes';
+import { reportError } from '../../services/errorTracking';
 
 /**
  * Top-level error boundary.
@@ -23,6 +24,7 @@ class ErrorBoundary extends React.Component {
 
     componentDidCatch(error, info) {
         console.error('Unhandled UI error:', error, info);
+        reportError(error, { componentStack: info?.componentStack });
     }
 
     render() {

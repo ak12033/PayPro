@@ -1,0 +1,17 @@
+{
+  "name": "paypro-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end tests (plan.md §43.6): the real SPA against the real API and an in-memory MongoDB replica set.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "install:browsers": "playwright install chromium",
+    "stack": "node stack/start-api.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "mongodb-memory-server": "^11.2.0",
+    "mongoose": "^8.16.0"
+  }
+}

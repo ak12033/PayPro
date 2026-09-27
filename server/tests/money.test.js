@@ -47,7 +47,7 @@ const signup = async (email, password = 'Str0ngPass99') => {
 };
 
 const fund = (userId, amount) =>
-    User.updateOne({ _id: userId }, { $set: { accountBalance: amount } });
+    User.updateOne({ _id: userId }, { $set: { accountBalance: amount, balanceMinor: Math.round(amount * 100) } });
 
 const auth = (t) => ({ Authorization: `Bearer ${t}` });
 
@@ -114,9 +114,41 @@ describe('POST /api/transactions/transfer', () => {
         const second = await request(app).post('/api/transactions/transfer').set(auth(alice.token)).send(body);
 
         expect(first.status).toBe(200);
+        // The idempotency middleware claims the key before settlement and
+        // replays the first response verbatim for a genuine retry — money
+        // moves exactly once regardless of how many times the client resends
+        // the same request.
         expect(second.status).toBe(200);
-        expect(second.body.duplicate).toBe(true);
+        expect(second.body).toEqual(first.body);
 
+        expect((await User.findById(alice.id)).accountBalance).toBe(900);
+        expect((await User.findById(bob.id)).accountBalance).toBe(100);
+    });
+
+    /**
+     * Regression: the key used to be written *after* settlement in a swallowed
+     * `.catch(() => {})`, so two requests carrying the same key that both
+     * arrived before either had settled both passed the pre-check and both
+     * moved money. The idempotency middleware claims the key with a unique
+     * index before any ledger write happens, so this can no longer race.
+     */
+    it('moves money exactly once under concurrent requests sharing a key', async () => {
+        const key = 'dup-key-concurrent';
+        const body = { recipientId: bob.id, amount: 100, idempotencyKey: key };
+
+        const results = await Promise.all(
+            Array.from({ length: 5 }, () =>
+                request(app).post('/api/transactions/transfer').set(auth(alice.token)).send(body)
+            )
+        );
+
+        // Whichever request claims the key first settles the transfer; every
+        // other concurrent caller either gets turned away (409, "already being
+        // processed") or — if it arrives after settlement — a replay of the
+        // first response. None of them settle a second transfer.
+        for (const r of results) {
+            expect([200, 409]).toContain(r.status);
+        }
         expect((await User.findById(alice.id)).accountBalance).toBe(900);
         expect((await User.findById(bob.id)).accountBalance).toBe(100);
     });
@@ -252,12 +284,18 @@ describe('POST /api/transactions/add', () => {
         expect(res.body.transaction.category).toBe('Food');
     });
 
-    it('will not let a manual expense overdraw', async () => {
+    /**
+     * Regression: a manual entry used to move real balance, so an expense
+     * larger than the wallet was rejected as an "overdraw" — implying the
+     * entry would otherwise have debited the account. It never does; the
+     * balance must be untouched either way.
+     */
+    it('records a manual expense larger than the balance without touching it', async () => {
         const res = await request(app).post('/api/transactions/add')
             .set(auth(alice.token))
             .send({ description: 'Big', amount: 900, type: 'expense' });
 
-        expect(res.status).toBe(400);
+        expect(res.status).toBe(201);
         expect((await User.findById(alice.id)).accountBalance).toBe(500);
     });
 });

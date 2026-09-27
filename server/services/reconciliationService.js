@@ -3,7 +3,21 @@ import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import Payment from '../models/Payment.js';
 import logger from '../utils/logger.js';
-import { toMoney } from '../utils/money.js';
+import { fromPaise, AMOUNT_MINOR_EXPR } from '../utils/money.js';
+import { BALANCE_MATCH, TX_SOURCE, TX_SETTLEMENT, TX_STATUS } from '../constants/transactionStatus.js';
+import { createLedgerEntry } from './ledgerService.js';
+
+/**
+ * Only rows that actually moved (or still move) real balance participate in
+ * the invariant: a manual note (`settlement: 'none'`) never touched
+ * `accountBalance`, and a PENDING/FAILED/CANCELLED row hasn't (or never will)
+ * either. A REFUNDED row *did* — see BALANCE_STATUSES for why it is included —
+ * and so does a withdrawal or bill payment still PENDING/PROCESSING, whose
+ * money is held out of the wallet (HOLD_SOURCES, Phase 5).
+ * Reused by every aggregation below so "what counts as settled" has exactly
+ * one definition.
+ */
+export const SETTLED_MATCH = BALANCE_MATCH;
 
 /**
  * Wallet reconciliation.
@@ -28,11 +42,16 @@ import { toMoney } from '../utils/money.js';
  * entry rather than silently overwriting a balance, and never runs implicitly.
  */
 
-const ROUNDING_TOLERANCE = 0.01; // one paise
-
 /**
  * Compare every user's stored balance against the sum of their ledger rows.
  * Runs entirely as an aggregation so it does not load users into memory.
+ *
+ * The comparison is in integer paise (`balanceMinor` against Σ`amountMinor`),
+ * with **zero tolerance** (plan.md §7.4 step 3). It used to compare rupee
+ * doubles within a one-paisa tolerance, because summing doubles cannot be
+ * exact; integers can, so any difference at all is real drift. The rupee
+ * fields in each row (`accountBalance`, `expectedBalance`, `drift`, …) are
+ * derived from the minor values for display and for older callers.
  */
 export const reconcileBalances = async ({ userId = null, limit = 500 } = {}) => {
     const match = userId ? { _id: new mongoose.Types.ObjectId(userId) } : {};
@@ -45,10 +64,11 @@ export const reconcileBalances = async ({ userId = null, limit = 500 } = {}) => 
                 localField: '_id',
                 foreignField: 'userId',
                 pipeline: [
+                    { $match: SETTLED_MATCH },
                     {
                         $group: {
                             _id: '$type',
-                            total: { $sum: '$amount' },
+                            total: { $sum: AMOUNT_MINOR_EXPR },
                             count: { $sum: 1 },
                         },
                     },
@@ -58,7 +78,7 @@ export const reconcileBalances = async ({ userId = null, limit = 500 } = {}) => 
         },
         {
             $addFields: {
-                credits: {
+                creditsMinor: {
                     $ifNull: [
                         { $first: { $map: {
                             input: { $filter: { input: '$ledger', cond: { $eq: ['$$this._id', 'Credit'] } } },
@@ -67,7 +87,7 @@ export const reconcileBalances = async ({ userId = null, limit = 500 } = {}) => 
                         0,
                     ],
                 },
-                debits: {
+                debitsMinor: {
                     $ifNull: [
                         { $first: { $map: {
                             input: { $filter: { input: '$ledger', cond: { $eq: ['$$this._id', 'Debit'] } } },
@@ -81,37 +101,41 @@ export const reconcileBalances = async ({ userId = null, limit = 500 } = {}) => 
         },
         {
             $addFields: {
-                expectedBalance: { $subtract: ['$credits', '$debits'] },
+                balanceMinor: { $ifNull: ['$balanceMinor', 0] },
+                expectedMinor: { $subtract: ['$creditsMinor', '$debitsMinor'] },
             },
         },
         {
             $addFields: {
-                drift: { $subtract: ['$accountBalance', '$expectedBalance'] },
+                driftMinor: { $subtract: ['$balanceMinor', '$expectedMinor'] },
             },
         },
-        {
-            // Only surface accounts that actually disagree.
-            $match: {
-                $expr: { $gt: [{ $abs: '$drift' }, ROUNDING_TOLERANCE] },
-            },
-        },
-        { $sort: { drift: -1 } },
+        // Only surface accounts that actually disagree.
+        { $match: { driftMinor: { $ne: 0 } } },
+        { $sort: { driftMinor: -1 } },
         { $limit: limit },
         {
             $project: {
                 _id: 1,
                 email: 1,
-                accountBalance: 1,
-                expectedBalance: { $round: ['$expectedBalance', 2] },
-                drift: { $round: ['$drift', 2] },
-                credits: { $round: ['$credits', 2] },
-                debits: { $round: ['$debits', 2] },
+                balanceMinor: 1,
+                expectedMinor: 1,
+                driftMinor: 1,
+                creditsMinor: 1,
+                debitsMinor: 1,
                 entryCount: 1,
             },
         },
     ]).option({ allowDiskUse: true });
 
-    return results;
+    return results.map((row) => ({
+        ...row,
+        accountBalance: fromPaise(row.balanceMinor),
+        expectedBalance: fromPaise(row.expectedMinor),
+        drift: fromPaise(row.driftMinor),
+        credits: fromPaise(row.creditsMinor),
+        debits: fromPaise(row.debitsMinor),
+    }));
 };
 
 /**
@@ -130,7 +154,7 @@ export const findOrphanedTransferLegs = async ({ limit = 200 } = {}) => {
                 _id: '$transferGroupId',
                 legs: { $sum: 1 },
                 types: { $addToSet: '$type' },
-                amounts: { $addToSet: '$amount' },
+                amounts: { $addToSet: AMOUNT_MINOR_EXPR },
                 ids: { $push: '$_id' },
                 createdAt: { $first: '$createdAt' },
             },
@@ -165,6 +189,11 @@ export const reconcilePayments = async ({ limit = 200 } = {}) => {
                     from: 'transactions',
                     localField: 'orderId',
                     foreignField: 'paymentRef',
+                    // A PENDING row is created up-front at checkout (see
+                    // paymentController.createOrder), so it always exists —
+                    // only a *settled* row proves the wallet was actually
+                    // credited.
+                    pipeline: [{ $match: { status: 'SUCCESS' } }],
                     as: 'ledger',
                 },
             },
@@ -175,7 +204,7 @@ export const reconcilePayments = async ({ limit = 200 } = {}) => {
         ]),
 
         Transaction.aggregate([
-            { $match: { category: 'Top Up', paymentRef: { $ne: null } } },
+            { $match: { category: 'Top Up', status: 'SUCCESS', paymentRef: { $ne: null } } },
             {
                 $lookup: {
                     from: 'payments',
@@ -207,9 +236,7 @@ export const runReconciliation = async (options = {}) => {
         reconcilePayments(options),
     ]);
 
-    const totalDrift = toMoney(
-        balanceDrift.reduce((sum, row) => sum + row.drift, 0)
-    );
+    const totalDriftMinor = balanceDrift.reduce((sum, row) => sum + row.driftMinor, 0);
 
     const report = {
         generatedAt: new Date().toISOString(),
@@ -221,7 +248,8 @@ export const runReconciliation = async (options = {}) => {
             payments.unbackedCredits.length === 0,
         summary: {
             driftedAccounts: balanceDrift.length,
-            netDrift: totalDrift,
+            netDrift: fromPaise(totalDriftMinor),
+            netDriftMinor: totalDriftMinor,
             orphanedTransferLegs: orphanedLegs.length,
             capturedPaymentsMissingCredit: payments.missingCredits.length,
             creditsWithoutCapturedPayment: payments.unbackedCredits.length,
@@ -249,8 +277,23 @@ export const runReconciliation = async (options = {}) => {
  *    auditable, rather than silently rewriting `accountBalance`;
  *  - re-reads and re-checks inside the transaction, so a concurrent transfer
  *    between the report and the repair cannot cause a wrong adjustment.
+ *
+ * How the compensating row relates to the ledger sum it corrects (plan.md
+ * §0.15). Drift means the *balance* disagrees with rows that are already
+ * correct, so the balance moves to the ledger — and the row describing that
+ * move is written `settlement: 'none'`, `source: 'adjustment'`. It cannot be a
+ * settled row: a settled row for the drift amount would change the very sum
+ * the balance was just set to, and the account would be reported as drifted by
+ * exactly the correction on the next run. As a note it shows up in Activity and
+ * in the admin transaction search, carries the actor, reason and before/after
+ * values (§29.3 rule 3), and never enters any balance aggregation. It is written
+ * in the same transaction as the balance change, so one never exists without
+ * the other.
+ *
+ * An operator who instead needs to move money — a goodwill credit, say — uses
+ * `ledgerService.applyAdjustment`, which *is* a settled movement.
  */
-export const repairAccountBalance = async (userId, { reason = 'Reconciliation adjustment' } = {}) => {
+export const repairAccountBalance = async (userId, { reason = 'Reconciliation adjustment', actorId = null } = {}) => {
     const [current] = await reconcileBalances({ userId, limit: 1 });
 
     if (!current) {
@@ -262,21 +305,25 @@ export const repairAccountBalance = async (userId, { reason = 'Reconciliation ad
         let outcome;
 
         await session.withTransaction(async () => {
-            const user = await User.findById(userId).select('accountBalance').session(session);
+            const user = await User.findById(userId).select('balanceMinor').session(session);
             if (!user) throw new Error('User not found');
 
             // Recompute under the transaction — the report may be stale.
             const rows = await Transaction.aggregate([
-                { $match: { userId: new mongoose.Types.ObjectId(userId) } },
-                { $group: { _id: '$type', total: { $sum: '$amount' } } },
+                { $match: { userId: new mongoose.Types.ObjectId(userId), ...SETTLED_MATCH } },
+                { $group: { _id: '$type', total: { $sum: AMOUNT_MINOR_EXPR } } },
             ]).session(session);
 
-            const credits = rows.find((r) => r._id === 'Credit')?.total ?? 0;
-            const debits = rows.find((r) => r._id === 'Debit')?.total ?? 0;
-            const expected = toMoney(credits - debits);
-            const drift = toMoney(user.accountBalance - expected);
+            const creditsMinor = rows.find((r) => r._id === 'Credit')?.total ?? 0;
+            const debitsMinor = rows.find((r) => r._id === 'Debit')?.total ?? 0;
+            const expectedMinor = creditsMinor - debitsMinor;
+            const previousMinor = user.balanceMinor ?? 0;
+            const driftMinor = previousMinor - expectedMinor;
+            const expected = fromPaise(expectedMinor);
+            const previousBalance = fromPaise(previousMinor);
+            const drift = fromPaise(driftMinor);
 
-            if (Math.abs(drift) <= ROUNDING_TOLERANCE) {
+            if (driftMinor === 0) {
                 outcome = { repaired: false, message: 'Account became consistent before repair ran.' };
                 return;
             }
@@ -286,18 +333,44 @@ export const repairAccountBalance = async (userId, { reason = 'Reconciliation ad
              * it — and we record an explicit adjustment row describing the
              * correction, including the previous value.
              */
+            // `accountBalance` is set with it — the rupee column stays written
+            // for one release as the rollback path (plan.md §7.4 step 3).
             await User.updateOne(
                 { _id: userId },
-                { $set: { accountBalance: expected } },
+                { $set: { accountBalance: expected, balanceMinor: expectedMinor } },
                 { session }
             );
 
+            const note = await createLedgerEntry({
+                userId: user._id,
+                description: `Balance corrected: ${reason}`.slice(0, 280),
+                amount: Math.abs(drift),
+                // The direction the *balance* moved: a balance that was too high
+                // came down (Debit), one that was too low went up (Credit).
+                type: drift > 0 ? 'Debit' : 'Credit',
+                category: 'Adjustment',
+                icon: 'Scale',
+                source: TX_SOURCE.ADJUSTMENT,
+                settlement: TX_SETTLEMENT.NONE,
+                status: TX_STATUS.SUCCESS,
+                categorySource: 'system',
+                adjustment: {
+                    kind: 'repair',
+                    reason,
+                    actorId,
+                    previousBalance,
+                    correctedBalance: expected,
+                },
+            }, session);
+
             outcome = {
                 repaired: true,
-                previousBalance: user.accountBalance,
+                previousBalance,
                 correctedBalance: expected,
                 drift,
+                driftMinor,
                 reason,
+                transactionId: String(note._id),
             };
         });
 

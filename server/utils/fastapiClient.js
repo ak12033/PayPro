@@ -1,5 +1,8 @@
 import axios from 'axios';
 import config from '../config/env.js';
+import { CATEGORY_NAMES } from '../constants/categories.js';
+import { resolveAiCategory } from '../services/categoryService.js';
+import logger from './logger.js';
 
 /**
  * The AI service's two server-to-server endpoints.
@@ -65,9 +68,23 @@ const postWithRetry = async (path, body, { retries = 1 } = {}) => {
  */
 export const categorizeTransaction = async (description, amount) => {
     try {
-        return await postWithRetry('/ai/categorize', { description, amount });
+        // The canonical list travels with every call so the AI service's
+        // prompt and this codebase's category registry can never drift apart
+        // — previously the two were maintained as two separately-edited lists
+        // (19 categories in the FastAPI prompt vs 12 here).
+        const result = await postWithRetry('/ai/categorize', {
+            description,
+            amount,
+            allowed_categories: CATEGORY_NAMES,
+        });
+
+        // Defence in depth: even if the model (or an older, un-redeployed AI
+        // service) returns something off-list, this never lets an unknown
+        // category value reach the ledger.
+        const { category, icon } = resolveAiCategory(result.category);
+        return { ...result, category, icon };
     } catch (error) {
-        console.error('FastAPI categorization failed:', error.message);
+        logger.error('FastAPI categorization failed', { error: error.message });
         return { category: 'Others', confidence_score: 0.0, icon: 'CircleDollarSign' };
     }
 };
@@ -79,10 +96,7 @@ export const checkFraud = async (newTransaction, history) => {
             history: history
         });
     } catch (error) {
-        console.error(
-            '⚠️  FRAUD CHECK UNAVAILABLE — transaction allowed without screening:',
-            error.message
-        );
+        logger.error('Fraud check unavailable; transaction allowed without screening', { error: error.message });
         return { risk_score: 0, risk_level: 'low', reason: 'Fraud check service unavailable.' };
     }
 };

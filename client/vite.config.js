@@ -39,6 +39,11 @@ export default defineConfig({
           if (/[\\/]node_modules[\\/](socket\.io|engine\.io)/.test(id)) {
             return 'vendor-realtime'
           }
+          // Reached only through the dynamic import in services/errorTracking.js,
+          // and only when VITE_SENTRY_DSN is set — never part of the first load.
+          if (/[\\/]node_modules[\\/]@sentry/.test(id)) {
+            return 'vendor-sentry'
+          }
 
           /**
            * Everything else is left to Rollup.

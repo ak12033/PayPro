@@ -130,6 +130,17 @@ describe('POST /api/auth/login', () => {
     });
 });
 
+/** Pulls the value of a specific cookie out of a response's Set-Cookie header. */
+const cookieValue = (res, name) => {
+    const cookie = res.headers['set-cookie']?.find((c) => c.startsWith(`${name}=`));
+    return cookie ? cookie.split(';')[0].slice(name.length + 1) : null;
+};
+
+const cookieHeader = (res, name) => {
+    const cookie = res.headers['set-cookie']?.find((c) => c.startsWith(`${name}=`));
+    return cookie ? cookie.split(';')[0] : null;
+};
+
 describe('token lifecycle', () => {
     it('logout revokes the session server-side', async () => {
         const agent = request.agent(app);
@@ -147,11 +158,12 @@ describe('token lifecycle', () => {
 
     it('refresh rotates the refresh token and retires the old session row', async () => {
         const agent = request.agent(app);
-        await agent.post('/api/auth/signup').send(VALID);
+        const signup = await agent.post('/api/auth/signup').send(VALID);
+        const csrfToken = cookieValue(signup, 'csrfToken');
 
         const original = await Session.findOne({ isValid: true }).lean();
 
-        const first = await agent.get('/api/auth/refresh');
+        const first = await agent.post('/api/auth/refresh').set('X-CSRF-Token', csrfToken);
         expect(first.status).toBe(200);
         expect(first.body.accessToken).toBeTruthy();
 
@@ -178,12 +190,16 @@ describe('token lifecycle', () => {
 
         // The plaintext token only ever exists in the Set-Cookie header — the
         // database stores its SHA-256 — so capture it here to replay later.
-        const stolenCookie = signup.headers['set-cookie']
-            .find((c) => c.startsWith('refreshToken='))
-            .split(';')[0];
+        // The CSRF cookie is captured the same way — a real attacker able to
+        // steal the httpOnly refresh cookie off the wire or off disk can read
+        // this one too, since it is deliberately not httpOnly (see
+        // utils/token.js); this test is about reuse detection, not CSRF.
+        const stolenCookie = cookieHeader(signup, 'refreshToken');
+        const stolenCsrfCookie = cookieHeader(signup, 'csrfToken');
+        const csrfToken = cookieValue(signup, 'csrfToken');
 
         // The agent rotates it away with a normal refresh.
-        const rotated = await agent.get('/api/auth/refresh');
+        const rotated = await agent.post('/api/auth/refresh').set('X-CSRF-Token', csrfToken);
         expect(rotated.status).toBe(200);
 
         // Age the rotation past the double-refresh grace window, so the replay
@@ -195,10 +211,12 @@ describe('token lifecycle', () => {
 
         expect(await Session.countDocuments({})).toBeGreaterThan(0);
 
-        // Replay the consumed token.
+        // Replay the consumed token, presenting the same (still-matching)
+        // CSRF pair it was issued with.
         const replay = await request(app)
-            .get('/api/auth/refresh')
-            .set('Cookie', [stolenCookie]);
+            .post('/api/auth/refresh')
+            .set('Cookie', [stolenCookie, stolenCsrfCookie])
+            .set('X-CSRF-Token', csrfToken);
 
         expect(replay.status).toBe(401);
 
@@ -207,9 +225,51 @@ describe('token lifecycle', () => {
         expect(await Session.countDocuments({})).toBe(0);
     });
 
-    it('rejects a refresh with no cookie', async () => {
-        const res = await request(app).get('/api/auth/refresh');
+    it('rejects a refresh with no cookie at all', async () => {
+        const res = await request(app).post('/api/auth/refresh');
         expect(res.status).toBe(401);
+    });
+});
+
+describe('CSRF protection on POST /api/auth/refresh', () => {
+    it('rejects a refresh with the cookie but no X-CSRF-Token header', async () => {
+        const agent = request.agent(app);
+        await agent.post('/api/auth/signup').send(VALID);
+
+        // The agent resends both cookies automatically; the header is what's
+        // missing here.
+        const res = await agent.post('/api/auth/refresh');
+        expect(res.status).toBe(401);
+    });
+
+    it('rejects a refresh whose header does not match the cookie', async () => {
+        const agent = request.agent(app);
+        await agent.post('/api/auth/signup').send(VALID);
+
+        const res = await agent.post('/api/auth/refresh').set('X-CSRF-Token', 'wrong-value-entirely');
+        expect(res.status).toBe(401);
+    });
+
+    it('accepts a refresh whose header matches the cookie', async () => {
+        const agent = request.agent(app);
+        const signup = await agent.post('/api/auth/signup').send(VALID);
+        const csrfToken = cookieValue(signup, 'csrfToken');
+
+        const res = await agent.post('/api/auth/refresh').set('X-CSRF-Token', csrfToken);
+        expect(res.status).toBe(200);
+        expect(res.body.accessToken).toBeTruthy();
+    });
+
+    it('rotates the CSRF cookie alongside the refresh token', async () => {
+        const agent = request.agent(app);
+        const signup = await agent.post('/api/auth/signup').send(VALID);
+        const firstCsrf = cookieValue(signup, 'csrfToken');
+
+        const refreshed = await agent.post('/api/auth/refresh').set('X-CSRF-Token', firstCsrf);
+        const secondCsrf = cookieValue(refreshed, 'csrfToken');
+
+        expect(secondCsrf).toBeTruthy();
+        expect(secondCsrf).not.toBe(firstCsrf);
     });
 });
 

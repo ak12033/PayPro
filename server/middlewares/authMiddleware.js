@@ -39,7 +39,7 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
     }
 
     // Cheap projection; the _id index makes this a single-key lookup.
-    const user = await User.findById(decoded.id).select('tokenVersion').lean();
+    const user = await User.findById(decoded.id).select('tokenVersion role status emailVerified totp.enabled').lean();
     if (!user) {
         return res.status(401).json({ message: 'Invalid token', code: 'TOKEN_INVALID' });
     }
@@ -48,7 +48,28 @@ const authMiddleware = asyncHandler(async (req, res, next) => {
         return res.status(401).json({ message: 'Session revoked', code: 'TOKEN_REVOKED' });
     }
 
-    req.user = { id: decoded.id, email: decoded.email };
+    /**
+     * A suspension must take effect on the next request, not after the
+     * access token's 15-minute expiry — the whole point of suspending an
+     * account is usually that it is actively being abused right now.
+     */
+    if (user.status === 'closed') {
+        return res.status(403).json({ message: 'Account closed', code: 'ACCOUNT_CLOSED' });
+    }
+    if (user.status && user.status !== 'active') {
+        return res.status(403).json({ message: 'Account suspended', code: 'ACCOUNT_SUSPENDED' });
+    }
+
+    req.user = {
+        id: decoded.id,
+        email: decoded.email,
+        role: user.role || 'user',
+        // Read fresh for the same reason as role: verifying must unlock money
+        // movement on the next request, not after the token is re-minted.
+        emailVerified: user.emailVerified === true,
+        // Read by `requireStaffTotp`: enrolling must open the console at once.
+        totpEnabled: user.totp?.enabled === true,
+    };
     // Make the user id available to the logger for every downstream log line.
     if (req.context) req.context.userId = decoded.id;
     next();

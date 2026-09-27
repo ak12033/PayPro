@@ -51,5 +51,8 @@ paymentSchema.index({ userId: 1, createdAt: -1 });
 // Refund webhooks look payments up by gateway payment id.
 // sparse, because paymentId is null until the order is actually paid.
 paymentSchema.index({ paymentId: 1 }, { sparse: true });
+// analyticsController.getPaymentsStatus and reconciliationService both run
+// countDocuments/aggregate keyed on status; without this it's a collection scan.
+paymentSchema.index({ status: 1 });
 
 export default mongoose.model('Payment', paymentSchema);

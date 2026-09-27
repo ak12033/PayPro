@@ -192,6 +192,11 @@ export const ConfirmSheet = ({
     cancelLabel = 'Cancel',
     variant = 'primary',
     loading = false,
+    /** Extra content between the description and the footer — e.g. a
+        re-authentication field for a destructive account action. Most
+        confirmations need none, which is why the description alone still
+        renders (visibly, once there's a body to sit above) when omitted. */
+    children,
 }) => (
     <Sheet
         open={open}
@@ -216,7 +221,7 @@ export const ConfirmSheet = ({
             </div>
         }
     >
-        <span className="sr-only">{description}</span>
+        {children ?? <span className="sr-only">{description}</span>}
     </Sheet>
 );
 

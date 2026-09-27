@@ -6,6 +6,7 @@ import {
 import Card, { CardHeader } from '../../components/ui/Card';
 import EmptyState from '../../components/feedback/EmptyState';
 import ErrorState from '../../components/feedback/ErrorState';
+import ChartDataTable from '../../components/ui/ChartDataTable';
 import { formatCurrencyCompact } from '../../utils/formatters';
 import { formatAxisDate, formatTooltipDate } from './dashboardFormat';
 import {
@@ -57,52 +58,67 @@ const CashFlowChart = ({ overview, loading, error, onRetry, range }) => {
                         description="Your income and expenses will be plotted here side by side once you have some activity."
                     />
                 ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} barGap={2}>
-                            <CartesianGrid {...gridProps} />
-                            <XAxis
-                                dataKey="date"
-                                tickFormatter={(value) => formatAxisDate(value, range)}
-                                {...xAxisProps}
-                            />
-                            <YAxis
-                                tickFormatter={formatCurrencyCompact}
-                                {...yAxisProps}
-                                width={64}
-                            />
-                            <Tooltip cursor={barCursor} content={<CashFlowTooltip range={range} />} />
-                            <Legend
-                                iconType="circle"
-                                iconSize={8}
-                                wrapperStyle={{ fontSize: 12, color: 'var(--color-viz-label)' }}
-                            />
-                            <Bar
-                                dataKey="moneyIn"
-                                name="Money in"
-                                fill="var(--color-positive)"
-                                radius={BAR_RADIUS}
-                                maxBarSize={BAR_MAX_WIDTH}
-                            />
-                            <Bar
-                                dataKey="moneyOut"
-                                name="Money out"
-                                fill="var(--color-negative)"
-                                radius={BAR_RADIUS}
-                                maxBarSize={BAR_MAX_WIDTH}
-                            />
-                            <Line
-                                type="monotone"
-                                dataKey="net"
-                                name="Net"
-                                stroke={VIZ_PRIMARY}
-                                strokeWidth={SERIES_STROKE_WIDTH}
-                                dot={false}
-                                activeDot={activeDot}
-                            />
-                        </ComposedChart>
-                    </ResponsiveContainer>
+                    <div className="h-full w-full" aria-hidden="true">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }} barGap={2}>
+                                <CartesianGrid {...gridProps} />
+                                <XAxis
+                                    dataKey="date"
+                                    tickFormatter={(value) => formatAxisDate(value, range)}
+                                    {...xAxisProps}
+                                />
+                                <YAxis
+                                    tickFormatter={formatCurrencyCompact}
+                                    {...yAxisProps}
+                                    width={64}
+                                />
+                                <Tooltip cursor={barCursor} content={<CashFlowTooltip range={range} />} />
+                                <Legend
+                                    iconType="circle"
+                                    iconSize={8}
+                                    wrapperStyle={{ fontSize: 12, color: 'var(--color-viz-label)' }}
+                                />
+                                <Bar
+                                    dataKey="moneyIn"
+                                    name="Money in"
+                                    fill="var(--color-positive)"
+                                    radius={BAR_RADIUS}
+                                    maxBarSize={BAR_MAX_WIDTH}
+                                />
+                                <Bar
+                                    dataKey="moneyOut"
+                                    name="Money out"
+                                    fill="var(--color-negative)"
+                                    radius={BAR_RADIUS}
+                                    maxBarSize={BAR_MAX_WIDTH}
+                                />
+                                <Line
+                                    type="monotone"
+                                    dataKey="net"
+                                    name="Net"
+                                    stroke={VIZ_PRIMARY}
+                                    strokeWidth={SERIES_STROKE_WIDTH}
+                                    dot={false}
+                                    activeDot={activeDot}
+                                />
+                            </ComposedChart>
+                        </ResponsiveContainer>
+                    </div>
                 )}
             </div>
+
+            {!loading && hasActivity && (
+                <ChartDataTable
+                    caption={`Money in, money out and net by period, ${range}`}
+                    rows={series}
+                    columns={[
+                        { key: 'date', header: 'Period', render: (p) => formatTooltipDate(p.date, range) },
+                        { key: 'in', header: 'Money in', render: (p) => formatCurrencyCompact(p.moneyIn) },
+                        { key: 'out', header: 'Money out', render: (p) => formatCurrencyCompact(p.moneyOut) },
+                        { key: 'net', header: 'Net', render: (p) => formatCurrencyCompact(p.net) },
+                    ]}
+                />
+            )}
         </Card>
     );
 };

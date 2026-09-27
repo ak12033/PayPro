@@ -2,7 +2,13 @@ import mongoose from 'mongoose';
 
 const otpSchema = new mongoose.Schema({
     email: { type: String, required: true, lowercase: true, trim: true },
-    otpHash: { type: String, required: true },
+    /**
+     * Absent for an authenticator-app challenge (`context.method: 'totp'`):
+     * nothing is emailed, and the code is checked against the user's TOTP
+     * secret instead. The record still carries the binding, the attempt counter
+     * and the expiry, which is why such a challenge is stored here at all.
+     */
+    otpHash: { type: String, required() { return this.context?.method !== 'totp'; } },
     /**
      * Separates login-2FA codes from transfer-2FA codes.
      *
@@ -13,7 +19,7 @@ const otpSchema = new mongoose.Schema({
      */
     purpose: {
         type: String,
-        enum: ['login', 'transfer'],
+        enum: ['login', 'transfer', 'password_reset', 'email_verification'],
         required: true
     },
     // Bounded verification attempts: a 6-digit code falls in ~500k tries

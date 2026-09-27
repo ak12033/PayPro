@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, ShieldCheck } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { ArrowRight, CheckCircle2, ShieldCheck, ShieldAlert, ScanLine, QrCode } from 'lucide-react';
 import PageHeader from '../../components/layout/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -10,6 +11,11 @@ import IconBadge from '../../components/ui/IconBadge';
 import { AmountInput, Field } from '../../components/ui/Field';
 import { DetailRow } from '../../components/ui/List';
 import RecipientPicker from '../../features/transfer/RecipientPicker';
+import QrScanner from '../../features/transfer/QrScanner';
+import PaymentCodeSheet from '../../features/transfer/PaymentCodeSheet';
+import VerifyEmailBanner from '../../features/account/VerifyEmailBanner';
+import VerifyEmailSheet from '../../features/account/VerifyEmailSheet';
+import { payeeApi } from '../../services/api/endpoints/payeeApi';
 import { useAuth } from '../../context/AuthContext';
 import { transactionApi } from '../../services/api/endpoints/transactionApi';
 import { getErrorMessage } from '../../utils/errors';
@@ -52,9 +58,33 @@ const SendMoney = () => {
 
     const [step, setStep] = useState('recipient');
     const [recipient, setRecipient] = useState(null);
+    const [scannerOpen, setScannerOpen] = useState(false);
+    const [myCodeOpen, setMyCodeOpen] = useState(false);
+    const [resolvingCode, setResolvingCode] = useState(false);
+
+    /**
+     * A scanned code resolves to a recipient and stops there (plan.md §9.3).
+     * The user still lands on the amount step and confirms, exactly as if they
+     * had picked the person from the list — scanning saves typing a name, it
+     * does not authorise anything.
+     */
+    const handleScanned = async (code) => {
+        setResolvingCode(true);
+        try {
+            const { data } = await payeeApi.resolvePaymentCode(code);
+            setRecipient(data.recipient);
+            setScannerOpen(false);
+            setStep('amount');
+        } catch (err) {
+            toast.error(getErrorMessage(err, 'That payment code did not work.'));
+        } finally {
+            setResolvingCode(false);
+        }
+    };
     const [amount, setAmount] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState(null);
+    const [verifyOpen, setVerifyOpen] = useState(false);
 
     const numericAmount = Number(amount);
     const isValidAmount = Number.isFinite(numericAmount) && numericAmount > 0;
@@ -81,11 +111,22 @@ const SendMoney = () => {
              * no-op while a deliberate second transfer (new key) still goes
              * through.
              */
-            await transactionApi.transfer({
+            const { status } = await transactionApi.transfer({
                 recipientId: recipient._id,
                 amount: numericAmount,
                 idempotencyKey: createIdempotencyKey(),
             });
+
+            /**
+             * 202 means the risk engine held this for review (plan.md §30.2.2).
+             * It is not a success and must never render the "Money sent"
+             * screen — no money has moved, and telling someone it has is the
+             * single most damaging thing this page could get wrong.
+             */
+            if (status === 202) {
+                setStep('held');
+                return;
+            }
 
             setStep('done');
             // Refresh in the background. Blocking the success screen on a
@@ -103,10 +144,30 @@ const SendMoney = () => {
                 navigate(ROUTES.TRANSFER_2FA, {
                     state: {
                         email: caught.response.data.email,
+                        method: caught.response.data.method ?? 'email',
                         recipientName,
                         amount: numericAmount,
                     },
                 });
+                return;
+            }
+
+            /**
+             * Unverified address (plan.md §31.2.7). Nothing was claimed or
+             * moved — the server refuses before the idempotency key — so the
+             * useful response is the code prompt, right here on the review
+             * step, and then the same Send button again.
+             */
+            if (caught?.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+                setError('Verify your email, then send again. No money has moved.');
+                setVerifyOpen(true);
+                return;
+            }
+
+            // Blocked outright by the risk engine. A plain error message here
+            // would read as "try again", which is exactly what will not help.
+            if (caught?.response?.data?.code === 'TRANSFER_BLOCKED') {
+                setStep('blocked');
                 return;
             }
 
@@ -115,6 +176,53 @@ const SendMoney = () => {
             setSubmitting(false);
         }
     };
+
+    // ------------------------------------------------------ held / blocked
+
+    /**
+     * Both of these outcomes say the same critical thing first: **no money has
+     * moved.** That sentence leads, before any explanation, because it is the
+     * only fact the reader urgently needs and the one they will otherwise
+     * assume the opposite of.
+     */
+    if (step === 'held' || step === 'blocked') {
+        const held = step === 'held';
+        return (
+            <div className="mx-auto max-w-md py-6 text-center">
+                <IconBadge
+                    icon={held ? <ShieldCheck size={32} /> : <ShieldAlert size={32} />}
+                    tone="warning"
+                    size="xl"
+                    className="mx-auto"
+                />
+
+                <div role="status">
+                    <h1 className="mt-4 text-xl font-semibold text-text">
+                        {held ? 'We’re checking this transfer' : 'This transfer was stopped'}
+                    </h1>
+                    <p className="mt-1 text-sm text-text-muted">
+                        No money has moved, and your balance is unchanged.
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-text-muted">
+                        {held
+                            ? `Your ${formatCurrency(numericAmount)} to ${recipientName} looked unusual for your account, so someone is reviewing it. Most reviews finish within a day, and we’ll let you know — you can send it again once they do.`
+                            : `Your ${formatCurrency(numericAmount)} to ${recipientName} looked unusual enough that we stopped it. If this was you, get in touch and we’ll take another look.`}
+                    </p>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-2">
+                    {!held && (
+                        <Button variant="primary" fullWidth onClick={() => navigate(ROUTES.SUPPORT)}>
+                            Get help
+                        </Button>
+                    )}
+                    <Button variant={held ? 'primary' : 'ghost'} fullWidth onClick={() => navigate(ROUTES.HOME)}>
+                        Back to home
+                    </Button>
+                </div>
+            </div>
+        );
+    }
 
     // ---------------------------------------------------------------- success
 
@@ -172,10 +280,33 @@ const SendMoney = () => {
                 back={step === 'recipient' ? ROUTES.HOME : true}
             />
 
+            <VerifyEmailBanner className="mb-4" />
+
             <StepIndicator step={step} />
 
             {step === 'recipient' && (
                 <Card padding="md">
+                    <div className="mb-4 flex gap-2">
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="flex-1"
+                            icon={<ScanLine size={15} />}
+                            onClick={() => setScannerOpen(true)}
+                        >
+                            Scan a code
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="flex-1"
+                            icon={<QrCode size={15} />}
+                            onClick={() => setMyCodeOpen(true)}
+                        >
+                            Show my code
+                        </Button>
+                    </div>
+
                     <RecipientPicker
                         value={recipient}
                         onChange={(user) => {
@@ -188,6 +319,15 @@ const SendMoney = () => {
                     />
                 </Card>
             )}
+
+            <QrScanner
+                open={scannerOpen}
+                onClose={() => setScannerOpen(false)}
+                onResolved={handleScanned}
+                resolving={resolvingCode}
+            />
+
+            <PaymentCodeSheet open={myCodeOpen} onClose={() => setMyCodeOpen(false)} />
 
             {step === 'amount' && (
                 <div className="space-y-4">
@@ -338,6 +478,8 @@ const SendMoney = () => {
                     </div>
                 </div>
             )}
+
+            <VerifyEmailSheet open={verifyOpen} onClose={() => setVerifyOpen(false)} onVerified={() => setError(null)} />
         </div>
     );
 };

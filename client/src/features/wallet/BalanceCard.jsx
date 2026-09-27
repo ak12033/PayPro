@@ -34,8 +34,17 @@ const STORAGE_KEY = 'paypro-balance-hidden';
  *   Flashing a zero balance at someone, even for 200ms, is a small heart
  *   attack, and it was what the old stat tiles did on every dashboard visit.
  */
-const BalanceCard = ({ balance, loading = false }) => {
+const BalanceCard = ({ balanceMinor, loading = false }) => {
     const navigate = useNavigate();
+    /**
+     * Overdrawn (plan.md §4.4). Only a refund processed after the money was
+     * spent can put a balance below zero, and the server now says so rather
+     * than letting it happen silently. The card has to say so too: the label
+     * changes from "Available" to "Amount owed", the reason is stated, and Send
+     * is disabled because the server would refuse it anyway. Add money becomes
+     * the primary action, since it is the only thing that clears the debt.
+     */
+    const overdrawn = !loading && balanceMinor < 0;
     const { ref: tiltRef } = usePointerTilt();
     const [hidden, setHidden] = useState(() => {
         try {
@@ -47,19 +56,19 @@ const BalanceCard = ({ balance, loading = false }) => {
 
     // Announce a balance change politely rather than silently repainting the
     // number — a socket-driven update is otherwise invisible to a screen reader.
-    const previous = useRef(balance);
+    const previous = useRef(balanceMinor);
     const [changed, setChanged] = useState(false);
 
     useEffect(() => {
-        if (previous.current !== balance && previous.current !== undefined && !loading) {
+        if (previous.current !== balanceMinor && previous.current !== undefined && !loading) {
             setChanged(true);
             const id = setTimeout(() => setChanged(false), 1200);
-            previous.current = balance;
+            previous.current = balanceMinor;
             return () => clearTimeout(id);
         }
-        previous.current = balance;
+        previous.current = balanceMinor;
         return undefined;
-    }, [balance, loading]);
+    }, [balanceMinor, loading]);
 
     const toggleHidden = () => {
         setHidden((prev) => {
@@ -91,7 +100,9 @@ const BalanceCard = ({ balance, loading = false }) => {
 
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <p className="text-sm text-text-muted">Available balance</p>
+                    <p className={cn('text-sm', overdrawn ? 'font-medium text-negative' : 'text-text-muted')}>
+                        {overdrawn ? 'Amount owed' : 'Available balance'}
+                    </p>
 
                     <div
                         className="mt-1.5 flex min-h-11 items-center"
@@ -112,7 +123,7 @@ const BalanceCard = ({ balance, loading = false }) => {
                             </>
                         ) : (
                             <Amount
-                                value={balance}
+                                minor={balanceMinor}
                                 size="display"
                                 className={cn(changed && 'animate-pop')}
                             />
@@ -137,17 +148,26 @@ const BalanceCard = ({ balance, loading = false }) => {
              * previously two entries in a six-item sidebar on desktop and
              * unreachable on mobile.
              */}
+            {overdrawn && (
+                <p className="mt-3 rounded-control bg-negative-soft px-3 py-2.5 text-xs leading-5 text-text-secondary">
+                    A refund went through after this money had already been spent, so your balance is below zero.
+                    Add money to clear it. You can still receive money, but you can't send any until the balance is
+                    back above zero.
+                </p>
+            )}
+
             <div className="mt-5 grid grid-cols-2 gap-2">
                 <Button
-                    variant="primary"
+                    variant={overdrawn ? 'secondary' : 'primary'}
                     size="lg"
                     icon={<Send size={17} />}
+                    disabled={overdrawn}
                     onClick={() => navigate(ROUTES.SEND)}
                 >
                     Send
                 </Button>
                 <Button
-                    variant="secondary"
+                    variant={overdrawn ? 'primary' : 'secondary'}
                     size="lg"
                     icon={<Plus size={17} />}
                     onClick={() => navigate(ROUTES.ADD_MONEY)}

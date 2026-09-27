@@ -16,6 +16,9 @@ import { SectionHeading } from '../components/layout/PageHeader';
 import Card from '../components/ui/Card';
 import IconBadge from '../components/ui/IconBadge';
 import AmbientGlow from '../components/ui/AmbientGlow';
+import BudgetSummaryCard from '../features/budget/BudgetSummaryCard';
+import VerifyEmailBanner from '../features/account/VerifyEmailBanner';
+import useBudget from '../features/budget/hooks/useBudget';
 import { ROUTES } from '../constants/routes';
 
 /**
@@ -46,7 +49,7 @@ const NetworkGrowthChart = lazy(() => import('../features/dashboard/NetworkGrowt
 const SuccessRateKpi = lazy(() => import('../features/dashboard/SuccessRateKpi'));
 
 const Home = () => {
-    const { userName, balance, recentTransactions, isCheckingAuth } = useAuth();
+    const { userName, balanceMinor, recentTransactions, isCheckingAuth } = useAuth();
     const [selected, setSelected] = useState(null);
     const [range, setRange] = useState('1M');
 
@@ -54,6 +57,7 @@ const Home = () => {
     const categories = useCategoryBreakdown(range);
     const network = useNetworkGrowth(range);
     const paymentsStatus = usePaymentsStatus(range);
+    const budget = useBudget();
 
     const summary = overview.data?.summary;
     const series = overview.data?.series ?? [];
@@ -75,7 +79,9 @@ const Home = () => {
                     {userName ? `, ${userName}` : ''}
                 </h1>
 
-                <BalanceCard balance={balance} loading={isCheckingAuth} />
+                <VerifyEmailBanner className="mb-4" />
+
+                <BalanceCard balanceMinor={balanceMinor} loading={isCheckingAuth} />
 
                 {/* ------------------------------------------ executive overview */}
                 <section className="mt-6" aria-labelledby="performance-heading">
@@ -113,6 +119,17 @@ const Home = () => {
                         />
                     </div>
                 </section>
+            </div>
+
+            {/* ------------------------------------------------ budget summary */}
+            <div className="mt-6">
+                <BudgetSummaryCard
+                    data={budget.data}
+                    loading={budget.loading}
+                    error={budget.error}
+                    onRetry={budget.retry}
+                    compact
+                />
             </div>
 
             {/* --------------------------------------------------------- chart 1 */}

@@ -4,6 +4,8 @@ import Otp, { OTP_MAX_ATTEMPTS, OTP_TTL_MS } from '../models/Otp.js';
 import sendOtp from '../utils/sendOtp.js';
 import { scoreMatch } from './deviceFingerprintService.js';
 import securityConfig from '../config/security.js';
+import logger from '../utils/logger.js';
+import { verifyFactor } from './totpService.js';
 
 /**
  * Second-factor challenges.
@@ -49,7 +51,7 @@ const deliver = (email, code, purpose) => {
     // Fire-and-forget: SMTP latency must not hold the HTTP response open, and an
     // SMTP outage must not turn a valid login into a 500.
     sendOtp(email, code, purpose).catch((err) =>
-        console.error(`${purpose} OTP delivery failed:`, err.message)
+        logger.error('OTP delivery failed', { purpose, error: err.message })
     );
 };
 
@@ -68,8 +70,10 @@ export const issueLoginChallenge = async (user, {
     reasons = [],
     riskScore = 0,
 } = {}) => {
-    const code = generateCode();
-    const otpHash = await bcrypt.hash(code, OTP_BCRYPT_ROUNDS);
+    // An authenticator replaces the emailed code rather than sitting beside it.
+    const method = user.totp?.enabled ? 'totp' : 'email';
+    const code = method === 'email' ? generateCode() : null;
+    const otpHash = code ? await bcrypt.hash(code, OTP_BCRYPT_ROUNDS) : undefined;
     const challengeId = crypto.randomBytes(16).toString('hex');
 
     await Otp.deleteMany({ email: user.email, purpose: 'login' });
@@ -81,6 +85,7 @@ export const issueLoginChallenge = async (user, {
         expiry: new Date(Date.now() + OTP_TTL_MS),
         context: {
             challengeId,
+            method,
             userId: String(user._id),
             deviceId: deviceId ? String(deviceId) : null,
             loginHistoryId: loginHistoryId ? String(loginHistoryId) : null,
@@ -93,9 +98,9 @@ export const issueLoginChallenge = async (user, {
         },
     });
 
-    deliver(user.email, code, 'login');
+    if (code) deliver(user.email, code, 'login');
 
-    return { challengeId };
+    return { challengeId, method };
 };
 
 /**
@@ -108,6 +113,9 @@ export const issueLoginChallenge = async (user, {
 export const reissueLoginChallenge = async (email) => {
     const pending = await Otp.findOne({ email, purpose: 'login' }).sort({ createdAt: -1 });
     if (!pending) return false;
+    // Nothing to resend: the code is on the user's phone. Emailing one here
+    // would turn "resend" into a way around the authenticator.
+    if (pending.context?.method === 'totp') return false;
 
     const code = generateCode();
     const otpHash = await bcrypt.hash(code, OTP_BCRYPT_ROUNDS);
@@ -139,7 +147,7 @@ const safeEqual = (a, b) => {
  * pair: `findOne` without a sort returns an arbitrary document, which used to
  * make the code the user had just received unusable when an older row existed.
  */
-export const consumeChallenge = async (email, purpose, otp) => {
+export const consumeChallenge = async (email, purpose, otp, { verify = null } = {}) => {
     const record = await Otp.findOne({ email, purpose }).sort({ createdAt: -1 });
 
     if (!record) {
@@ -160,7 +168,9 @@ export const consumeChallenge = async (email, purpose, otp) => {
         return { status: 429, message: 'Too many incorrect attempts. Please request a new code.' };
     }
 
-    const isMatch = await bcrypt.compare(String(otp), record.otpHash);
+    const isMatch = verify
+        ? await verify(record, String(otp))
+        : await bcrypt.compare(String(otp), record.otpHash ?? '');
 
     if (!isMatch) {
         await Otp.updateOne({ _id: record._id }, { $inc: { attempts: 1 } });
@@ -179,7 +189,22 @@ export const consumeChallenge = async (email, purpose, otp) => {
         return { status: 409, message: 'This code has already been used.' };
     }
 
-    return { record };
+    return { record, factor: record.factor ?? null };
+};
+
+/**
+ * The verifier for an authenticator challenge, or null for an emailed one.
+ *
+ * The factor result (which method, recovery codes left) is stashed on the
+ * record so the caller can audit and warn about recovery-code use.
+ */
+export const factorVerifierFor = (pending) => {
+    if (pending?.context?.method !== 'totp') return null;
+    return async (record, code) => {
+        const factor = await verifyFactor(record.context.userId, code);
+        record.factor = factor;
+        return factor.ok;
+    };
 };
 
 /**
@@ -226,10 +251,10 @@ export const verifyLoginChallenge = async ({ email, otp, challengeId, prints }) 
         }
     }
 
-    const result = await consumeChallenge(email, 'login', otp);
+    const result = await consumeChallenge(email, 'login', otp, { verify: factorVerifierFor(pending) });
     if (result.message) return result;
 
-    return { record: result.record, context: result.record.context || {} };
+    return { record: result.record, context: result.record.context || {}, factor: result.factor };
 };
 
 export default {
@@ -237,4 +262,5 @@ export default {
     reissueLoginChallenge,
     verifyLoginChallenge,
     consumeChallenge,
+    factorVerifierFor,
 };

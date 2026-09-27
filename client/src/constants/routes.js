@@ -39,10 +39,14 @@
  */
 export const ROUTES = {
     // ---- public
+    /** Splash: plays the launch sequence, then routes to Home or Login. */
     LANDING: '/',
+    WELCOME: '/welcome',
     LOGIN: '/login',
     SIGNUP: '/signup',
     LOGIN_2FA: '/verify-login-otp',
+    FORGOT_PASSWORD: '/forgot-password',
+    RESET_PASSWORD: '/reset-password',
 
     // ---- authenticated, full-screen (no shell: these are focused flows)
     TRANSFER_2FA: '/verify-otp',
@@ -52,6 +56,8 @@ export const ROUTES = {
     MONEY: '/money',
     SEND: '/money/send',
     ADD_MONEY: '/money/add',
+    /** Phase 5: to the holder's own verified bank account (plan.md §0.20.3). */
+    WITHDRAW: '/money/withdraw',
     ACTIVITY: '/activity',
     ACCOUNT: '/account',
 
@@ -59,6 +65,20 @@ export const ROUTES = {
     INSIGHTS: '/insights',
     SECURITY: '/account/security',
     NOTIFICATIONS: '/notifications',
+    BUDGETS: '/insights/budgets',
+    GOALS: '/insights/goals',
+    /**
+     * Bills and detected repeat payments share one destination: they are two
+     * views of "this money goes out regularly", and splitting them would make
+     * a user check two screens to answer one question (plan.md §18.3, §19.2).
+     */
+    BILLS: '/insights/bills',
+    TOOLS: '/insights/tools',
+    SUPPORT: '/account/support',
+    /** Phase 5: identity verification (plan.md §0.20.2). Notifications of type Account land here. */
+    VERIFICATION: '/account/verification',
+    /** Phase 5: self-reported holdings and debts (plan.md §21, §22). */
+    PORTFOLIO: '/insights/portfolio',
 
     /**
      * Manual ledger entry.
@@ -72,16 +92,37 @@ export const ROUTES = {
      */
     ACTIVITY_MANUAL_ENTRY: '/activity/record',
 
+    /**
+     * The operations console (plan.md §28.4). Staff-only, and reached from the
+     * sidebar's "Operations" group or the Account screen — never a fifth tab.
+     * The customer's four destinations stay exactly as they are for staff too.
+     */
+    ADMIN: '/admin',
+    ADMIN_RISK: '/admin/risk',
+    ADMIN_SUPPORT: '/admin/support',
+    ADMIN_USERS: '/admin/users',
+    ADMIN_TRANSACTIONS: '/admin/transactions',
+    ADMIN_PAYMENTS: '/admin/payments',
+    ADMIN_RECONCILIATION: '/admin/reconciliation',
+    ADMIN_WEBHOOKS: '/admin/webhooks',
+    ADMIN_AUDIT: '/admin/audit',
+    ADMIN_KYC: '/admin/kyc',
+    ADMIN_AML: '/admin/aml',
+    ADMIN_WITHDRAWALS: '/admin/withdrawals',
+
     NOT_FOUND: '*',
 };
 
 /** Paths a signed-out visitor is allowed to sit on. */
 export const PUBLIC_ROUTES = [
     ROUTES.LANDING,
+    ROUTES.WELCOME,
     ROUTES.LOGIN,
     ROUTES.SIGNUP,
     ROUTES.LOGIN_2FA,
     ROUTES.TRANSFER_2FA,
+    ROUTES.FORGOT_PASSWORD,
+    ROUTES.RESET_PASSWORD,
 ];
 
 /**

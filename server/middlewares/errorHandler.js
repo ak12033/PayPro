@@ -1,5 +1,6 @@
 import config from '../config/env.js';
 import { LedgerError } from '../services/ledgerService.js';
+import { DomainError } from '../utils/domainError.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -18,19 +19,36 @@ export const notFoundHandler = (req, res) => {
     });
 };
 
+/**
+ * Whether the handler below will answer with a 4xx. A client error is the
+ * caller's mistake, not a defect: it is logged at `warn` and never reaches error
+ * tracking, which would otherwise fill with every failed validation.
+ */
+const isClientError = (err) =>
+    err instanceof LedgerError
+    || err instanceof DomainError
+    || err?.name === 'ValidationError'
+    || err?.name === 'CastError'
+    || err?.code === 11000
+    || err?.type === 'entity.too.large'
+    || err?.type === 'entity.parse.failed'
+    || err?.message === 'Not allowed by CORS'
+    || (err?.status || err?.statusCode || 500) < 500;
+
 // eslint-disable-next-line no-unused-vars -- Express identifies error middleware by arity
 export const errorHandler = (err, req, res, next) => {
     if (res.headersSent) return next(err);
 
-    // Always log the full error server-side; never send it downstream.
-    logger.error('Request failed', {
-        method: req.method,
-        url: req.originalUrl,
-        error: err.message,
-        stack: err.stack,
-    });
+    // Always log the full error server-side; never send it downstream. The
+    // path only, not the query string, which can carry a searched email.
+    const where = { method: req.method, url: req.originalUrl?.split('?')[0] };
+    if (isClientError(err)) {
+        logger.warn('Request rejected', { ...where, error: err.message });
+    } else {
+        logger.error('Request failed', { ...where, err });
+    }
 
-    if (err instanceof LedgerError) {
+    if (err instanceof LedgerError || err instanceof DomainError) {
         return res.status(err.status).json({ message: err.message, code: err.code });
     }
 

@@ -10,13 +10,17 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "reconcile": "node scripts/reconcile.js",
-    "reconcile:json": "node scripts/reconcile.js --json"
+    "reconcile:json": "node scripts/reconcile.js --json",
+    "backfill:minor": "node scripts/backfillMinor.js",
+    "backfill:minor:verify": "node scripts/backfillMinor.js --verify",
+    "secrets:check": "node scripts/checkSecrets.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@sentry/node": "^10.75.1",
     "axios": "^1.10.0",
     "bcryptjs": "^3.0.2",
     "compression": "^1.8.1",
@@ -33,6 +37,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.3",
     "nodemon": "^3.1.10",
+    "pdfkit": "^0.15.0",
     "razorpay": "^2.9.6",
     "socket.io": "^4.8.1"
   },

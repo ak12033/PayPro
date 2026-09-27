@@ -1,9 +1,12 @@
 import React from 'react';
 import cn from '../../lib/cn';
+import Badge from '../../components/ui/Badge';
 import { LedgerAmount } from '../../components/ui/Amount';
 import { getTransactionIcon } from './transactionIcons';
+import { statusMeta } from './transactionStatus';
 import { LEDGER_TYPES } from '../../constants/transactions';
 import { formatTime } from '../../utils/formatters';
+import { amountMinorOf } from '../../lib/money';
 
 /**
  * One line in the ledger.
@@ -28,6 +31,7 @@ import { formatTime } from '../../utils/formatters';
 const TransactionRow = ({ transaction, onSelect, className }) => {
     const isDebit = transaction.type === LEDGER_TYPES.DEBIT;
     const Icon = getTransactionIcon(transaction.icon);
+    const status = statusMeta(transaction.status);
 
     return (
         <li>
@@ -57,20 +61,27 @@ const TransactionRow = ({ transaction, onSelect, className }) => {
                     <span className="block truncate text-sm font-medium text-text">
                         {transaction.description || 'Transaction'}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-text-muted">
+                    <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-text-muted">
                         {/* Time, not the date: the row already sits under a day
                             heading, so repeating "04 March" on every line is
                             noise that pushes out the category. */}
-                        {formatTime(transaction.createdAt)}
-                        {transaction.category && transaction.category !== 'General' && (
-                            <> · {transaction.category}</>
+                        <span className="truncate">
+                            {formatTime(transaction.createdAt)}
+                            {transaction.category && transaction.category !== 'General' && (
+                                <> · {transaction.category}</>
+                            )}
+                        </span>
+                        {status && (
+                            <Badge tone={status.tone} size="sm" className="shrink-0">
+                                {status.label}
+                            </Badge>
                         )}
                     </span>
                 </span>
 
                 <LedgerAmount
                     type={transaction.type}
-                    value={transaction.amount}
+                    minor={amountMinorOf(transaction)}
                     size="sm"
                     className="shrink-0"
                 />

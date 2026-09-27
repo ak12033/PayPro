@@ -5,6 +5,7 @@ import Card, { CardHeader } from '../../components/ui/Card';
 import EmptyState from '../../components/feedback/EmptyState';
 import ErrorState from '../../components/feedback/ErrorState';
 import Skeleton from '../../components/ui/Skeleton';
+import ChartDataTable from '../../components/ui/ChartDataTable';
 import { formatCurrencyCompact, formatNumber } from '../../utils/formatters';
 import { formatAxisDate, formatTooltipDate } from './dashboardFormat';
 import {
@@ -58,35 +59,48 @@ const NetworkGrowthChart = ({ network, loading, error, onRetry, range }) => {
                         description="Send money to someone and they'll start showing up here."
                     />
                 ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                            <defs>
-                                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={SERIES_COLOR} stopOpacity={AREA_FILL_OPACITY.top} />
-                                    <stop offset="100%" stopColor={SERIES_COLOR} stopOpacity={AREA_FILL_OPACITY.bottom} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid {...gridProps} />
-                            <XAxis
-                                dataKey="date"
-                                tickFormatter={(value) => formatAxisDate(value, range)}
-                                {...xAxisProps}
-                            />
-                            <YAxis allowDecimals={false} {...yAxisProps} width={28} />
-                            <Tooltip cursor={lineCursor} content={<NetworkTooltip range={range} />} />
-                            <Area
-                                type="monotone"
-                                dataKey="cumulative"
-                                name="People reached"
-                                stroke={SERIES_COLOR}
-                                strokeWidth={SERIES_STROKE_WIDTH}
-                                fill={`url(#${gradientId})`}
-                                activeDot={activeDot}
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
+                    <div className="h-full w-full" aria-hidden="true">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                                <defs>
+                                    <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor={SERIES_COLOR} stopOpacity={AREA_FILL_OPACITY.top} />
+                                        <stop offset="100%" stopColor={SERIES_COLOR} stopOpacity={AREA_FILL_OPACITY.bottom} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid {...gridProps} />
+                                <XAxis
+                                    dataKey="date"
+                                    tickFormatter={(value) => formatAxisDate(value, range)}
+                                    {...xAxisProps}
+                                />
+                                <YAxis allowDecimals={false} {...yAxisProps} width={28} />
+                                <Tooltip cursor={lineCursor} content={<NetworkTooltip range={range} />} />
+                                <Area
+                                    type="monotone"
+                                    dataKey="cumulative"
+                                    name="People reached"
+                                    stroke={SERIES_COLOR}
+                                    strokeWidth={SERIES_STROKE_WIDTH}
+                                    fill={`url(#${gradientId})`}
+                                    activeDot={activeDot}
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
                 )}
             </div>
+
+            {!loading && hasNetwork && (
+                <ChartDataTable
+                    caption={`People you have sent money to, cumulative, ${range}`}
+                    rows={series}
+                    columns={[
+                        { key: 'date', header: 'Period', render: (p) => formatTooltipDate(p.date, range) },
+                        { key: 'cumulative', header: 'People reached', render: (p) => formatNumber(p.cumulative) },
+                    ]}
+                />
+            )}
 
             {!loading && topRecipients.length > 0 && (
                 <div className="mt-4 border-t border-border pt-3">

@@ -1,0 +1,37 @@
+# Dependency update PRs (plan.md §29.1: "Add npm audit + pip-audit + Dependabot").
+#
+# The `security` job in ci.yml reports vulnerable dependencies; this is what
+# turns a report into a reviewable fix. Weekly and grouped, so a busy week is
+# a handful of PRs rather than dozens — and minor/patch updates are grouped
+# separately from majors, because a major (nodemailer, firebase-admin) needs a
+# real read of the changelog and should never ride along with a patch bump.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      server-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      client-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /fastapi-server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

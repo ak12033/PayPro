@@ -28,6 +28,13 @@ ASSISTANT_FIELDS = {
 # Credits in these categories are money the user added, not money received.
 TOP_UP_CATEGORIES = ["Top Up", "Stripe"]
 
+# A row's amount in integer paise: `amountMinor`, or — for a row the Node
+# server's backfill has not reached — `round(amount * 100)`. The same
+# expression as `AMOUNT_MINOR_EXPR` in server/utils/money.js (plan.md §7.4
+# step 3), so both services sum the ledger identically.
+AMOUNT_MINOR = {"$ifNull": ["$amountMinor", {"$round": [{"$multiply": ["$amount", 100]}, 0]}]}
+ABS_AMOUNT_MINOR = {"$abs": AMOUNT_MINOR}
+
 
 def _collection():
     return database.get_database()["transactions"]
@@ -78,7 +85,7 @@ async def spending_totals(user_id: ObjectId) -> dict:
                 "_id": None,
                 "totalSent": {
                     "$sum": {
-                        "$cond": [{"$eq": ["$type", "Debit"]}, {"$abs": "$amount"}, 0]
+                        "$cond": [{"$eq": ["$type", "Debit"]}, ABS_AMOUNT_MINOR, 0]
                     }
                 },
                 "totalAdded": {
@@ -90,7 +97,7 @@ async def spending_totals(user_id: ObjectId) -> dict:
                                     {"$in": ["$category", TOP_UP_CATEGORIES]},
                                 ]
                             },
-                            {"$abs": "$amount"},
+                            ABS_AMOUNT_MINOR,
                             0,
                         ]
                     }
@@ -104,7 +111,7 @@ async def spending_totals(user_id: ObjectId) -> dict:
                                     {"$not": [{"$in": ["$category", TOP_UP_CATEGORIES]}]},
                                 ]
                             },
-                            {"$abs": "$amount"},
+                            ABS_AMOUNT_MINOR,
                             0,
                         ]
                     }
@@ -121,4 +128,8 @@ async def spending_totals(user_id: ObjectId) -> dict:
     rows = await cursor.to_list(length=1)
     if not rows:
         return {"totalSent": 0, "totalReceived": 0, "totalAdded": 0, "totalTransactions": 0}
-    return rows[0]
+    # Summed exactly in paise; converted to rupees once, for the model.
+    row = rows[0]
+    for key in ("totalSent", "totalReceived", "totalAdded"):
+        row[key] = row[key] / 100
+    return row

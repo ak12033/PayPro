@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ShieldCheck, ShieldAlert, ChevronRight } from 'lucide-react';
 import Card from '../../components/ui/Card';
+import ScoreMeter from '../../components/ui/ScoreMeter';
 import cn from '../../lib/cn';
 
 /**
@@ -62,27 +63,22 @@ const SecurityScore = ({ checks }) => {
                      *
                      * The count is stated in words above regardless, so the
                      * bar is reinforcement rather than the only signal.
+                     *
+                     * Now drawn by the shared `ScoreMeter` (plan.md §25.2) —
+                     * the financial-health score needs the identical bar, and
+                     * one implementation is what stops the two drifting apart.
+                     * Tone is passed explicitly rather than derived: this bar
+                     * counts completed items, so its colour must agree with
+                     * the shield icon beside it rather than reading as "all
+                     * good" at 30% complete.
                      */}
-                    <div
-                        role="progressbar"
-                        aria-valuenow={done}
-                        aria-valuemin={0}
-                        aria-valuemax={total}
-                        aria-label="Security protections enabled"
-                        className="mt-3 h-1.5 overflow-hidden rounded-pill bg-border"
-                    >
-                        {/* Brand accent while there is still work to do, positive
-                            once there isn't — so the fill agrees with the shield
-                            icon beside it rather than reading as "all good" at
-                            30% complete. */}
-                        <div
-                            className={cn(
-                                'h-full rounded-pill transition-[width,background-color] duration-[--duration-slow] ease-[--ease-out]',
-                                allDone ? 'bg-positive' : 'bg-accent'
-                            )}
-                            style={{ width: `${total ? (done / total) * 100 : 0}%` }}
-                        />
-                    </div>
+                    <ScoreMeter
+                        value={done}
+                        max={total}
+                        tone={allDone ? 'positive' : 'accent'}
+                        label="Security protections enabled"
+                        className="mt-3"
+                    />
                 </div>
             </div>
 

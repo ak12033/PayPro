@@ -9,6 +9,7 @@ import FullScreenLoader from './components/feedback/FullScreenLoader';
 import ProtectedRoute from './components/ProtectedRoute';
 import Toaster from './components/feedback/Toaster';
 import Landing from './pages/Landing';
+import SplashScreen from './pages/SplashScreen';
 import Login from './pages/auth/Login';
 import { LEGACY_REDIRECTS, ROUTES } from './constants/routes';
 
@@ -25,6 +26,8 @@ import { LEGACY_REDIRECTS, ROUTES } from './constants/routes';
  */
 const Signup = lazy(() => import('./pages/auth/Signup'));
 const LoginVerify = lazy(() => import('./pages/auth/LoginVerify'));
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
 
 const AppShell = lazy(() => import('./components/shell/AppShell'));
 const Home = lazy(() => import('./pages/Home'));
@@ -35,9 +38,36 @@ const TransferVerify = lazy(() => import('./pages/money/TransferVerify'));
 const Activity = lazy(() => import('./pages/Activity'));
 const RecordTransaction = lazy(() => import('./pages/RecordTransaction'));
 const Insights = lazy(() => import('./pages/Insights'));
+const Budgets = lazy(() => import('./pages/insights/Budgets'));
+const Goals = lazy(() => import('./pages/insights/Goals'));
+const Bills = lazy(() => import('./pages/insights/Bills'));
+const Tools = lazy(() => import('./pages/insights/Tools'));
+const Support = lazy(() => import('./pages/account/Support'));
 const Account = lazy(() => import('./pages/account/Account'));
 const Security = lazy(() => import('./pages/account/Security'));
+const Verification = lazy(() => import('./pages/account/Verification'));
+const Withdraw = lazy(() => import('./pages/money/Withdraw'));
+const Portfolio = lazy(() => import('./pages/insights/Portfolio'));
 const NotFound = lazy(() => import('./pages/NotFound'));
+
+/**
+ * The operations console (plan.md §28.4). Its own chunks: a customer never
+ * downloads a byte of it, and staff only fetch the section they open.
+ */
+const RequireRole = lazy(() => import('./components/RequireRole'));
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
+const AdminOverview = lazy(() => import('./pages/admin/AdminOverview'));
+const AdminRisk = lazy(() => import('./pages/admin/AdminRisk'));
+const AdminSupport = lazy(() => import('./pages/admin/AdminSupport'));
+const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'));
+const AdminReconciliation = lazy(() => import('./pages/admin/AdminReconciliation'));
+const AdminWebhooks = lazy(() => import('./pages/admin/AdminWebhooks'));
+const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'));
+const AdminTransactions = lazy(() => import('./pages/admin/AdminTransactions'));
+const AdminPayments = lazy(() => import('./pages/admin/AdminPayments'));
+const AdminKyc = lazy(() => import('./pages/admin/AdminKyc'));
+const AdminAml = lazy(() => import('./pages/admin/AdminAml'));
+const AdminWithdrawals = lazy(() => import('./pages/admin/AdminWithdrawals'));
 
 const App = () => (
     <ErrorBoundary>
@@ -51,10 +81,13 @@ const App = () => (
                             <Suspense fallback={<FullScreenLoader srLabel="Loading page" />}>
                                 <Routes>
                                     {/* ------------------------------ public */}
-                                    <Route path={ROUTES.LANDING} element={<Landing />} />
+                                    <Route path={ROUTES.LANDING} element={<SplashScreen />} />
+                                    <Route path={ROUTES.WELCOME} element={<Landing />} />
                                     <Route path={ROUTES.LOGIN} element={<Login />} />
                                     <Route path={ROUTES.SIGNUP} element={<Signup />} />
                                     <Route path={ROUTES.LOGIN_2FA} element={<LoginVerify />} />
+                                    <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
+                                    <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
 
                                     {/* --------------------- authenticated */}
                                     <Route element={<ProtectedRoute />}>
@@ -75,6 +108,7 @@ const App = () => (
                                             <Route path={ROUTES.MONEY} element={<MoneyHub />} />
                                             <Route path={ROUTES.SEND} element={<SendMoney />} />
                                             <Route path={ROUTES.ADD_MONEY} element={<AddMoney />} />
+                                            <Route path={ROUTES.WITHDRAW} element={<Withdraw />} />
 
                                             <Route path={ROUTES.ACTIVITY} element={<Activity />} />
                                             <Route
@@ -83,9 +117,34 @@ const App = () => (
                                             />
 
                                             <Route path={ROUTES.INSIGHTS} element={<Insights />} />
+                                            <Route path={ROUTES.BUDGETS} element={<Budgets />} />
+                                            <Route path={ROUTES.GOALS} element={<Goals />} />
+                                            <Route path={ROUTES.BILLS} element={<Bills />} />
+                                            <Route path={ROUTES.TOOLS} element={<Tools />} />
+                                            <Route path={ROUTES.PORTFOLIO} element={<Portfolio />} />
+                                            <Route path={ROUTES.SUPPORT} element={<Support />} />
 
                                             <Route path={ROUTES.ACCOUNT} element={<Account />} />
                                             <Route path={ROUTES.SECURITY} element={<Security />} />
+                                            <Route path={ROUTES.VERIFICATION} element={<Verification />} />
+
+                                            {/* ------------------- operations console */}
+                                            <Route element={<RequireRole />}>
+                                                <Route element={<AdminLayout />}>
+                                                    <Route path={ROUTES.ADMIN} element={<RequireRole capability="viewMetrics"><AdminOverview /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_RISK} element={<RequireRole capability="reviewRisk"><AdminRisk /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_SUPPORT} element={<RequireRole capability="workSupport"><AdminSupport /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_USERS} element={<RequireRole capability="viewUsers"><AdminUsers /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_TRANSACTIONS} element={<RequireRole capability="searchTransactions"><AdminTransactions /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_PAYMENTS} element={<RequireRole capability="viewPayments"><AdminPayments /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_RECONCILIATION} element={<RequireRole capability="viewReconciliation"><AdminReconciliation /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_WEBHOOKS} element={<RequireRole capability="viewWebhooks"><AdminWebhooks /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_AUDIT} element={<RequireRole capability="viewAuditLog"><AdminAudit /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_KYC} element={<RequireRole capability="reviewKyc"><AdminKyc /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_AML} element={<RequireRole capability="viewAml"><AdminAml /></RequireRole>} />
+                                                    <Route path={ROUTES.ADMIN_WITHDRAWALS} element={<RequireRole capability="processWithdrawals"><AdminWithdrawals /></RequireRole>} />
+                                                </Route>
+                                            </Route>
                                         </Route>
                                     </Route>
 

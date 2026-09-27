@@ -3,13 +3,14 @@ import User from '../models/User.js';
 import { createSession } from '../utils/token.js';
 import { asEmail, asString, asObjectId } from '../utils/sanitize.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { executeTransfer, issueTransferChallenge } from './transactionController.js';
-import { parseAmount } from '../utils/money.js';
-import { publicUser } from './authController.js';
+import { executeTransfer, issueTransferChallenge, gateTransfer } from './transactionController.js';
+import { parseAmount, toPaise, balanceOf, balanceMinorOf } from '../utils/money.js';
+import { publicUser, markEmailVerified } from './authController.js';
 import {
     consumeChallenge,
     verifyLoginChallenge,
     reissueLoginChallenge,
+    factorVerifierFor,
 } from '../services/twoFactorService.js';
 import {
     describeRequestDevice,
@@ -17,6 +18,7 @@ import {
     finalizeLogin,
 } from '../services/loginSecurityService.js';
 import { audit } from '../services/auditService.js';
+import { notifyUser } from '../services/notificationService.js';
 import { AUDIT } from '../models/AuditLog.js';
 
 /**
@@ -30,7 +32,7 @@ import { AUDIT } from '../models/AuditLog.js';
  */
 export const verifyLoginOtp = asyncHandler(async (req, res) => {
     const email = asEmail(req.body?.email);
-    const otp = asString(req.body?.otp, { maxLength: 10 });
+    const otp = asString(req.body?.otp, { maxLength: 20 });
     const challengeId = asString(req.body?.challengeId, { maxLength: 64 });
     // Strict `=== true`: a truthy string from a mis-serialised form must not
     // silently grant a device permanent trust.
@@ -71,6 +73,7 @@ export const verifyLoginOtp = asyncHandler(async (req, res) => {
     }
 
     const challenge = result.context;
+    const viaAuthenticator = challenge.method === 'totp';
 
     const { device, location } = await resolveChallengeDevice({
         user,
@@ -95,8 +98,28 @@ export const verifyLoginOtp = asyncHandler(async (req, res) => {
     audit(AUDIT.LOGIN_2FA_VERIFIED, {
         userId: user._id,
         req,
-        metadata: { city: location.city, trustDevice, reasons: challenge.reasons },
+        metadata: {
+            city: location.city, trustDevice, reasons: challenge.reasons,
+            method: result.factor?.method ?? 'email',
+        },
     });
+
+    if (result.factor?.method === 'recovery') {
+        await reportRecoveryCodeUse(user, req, result.factor.recoveryCodesRemaining);
+    }
+
+    /**
+     * A login code was emailed to this address and typed back in, which proves
+     * inbox control exactly as the signup code does (plan.md §31.2.7). An
+     * existing user who has already done this should not be asked to verify
+     * the same address a second time.
+     */
+    // Only an *emailed* code proves that; an authenticator code proves nothing about the inbox.
+    if (!user.emailVerified && !viaAuthenticator) {
+        await markEmailVerified(user._id, user.email);
+        user.emailVerified = true;
+        audit(AUDIT.EMAIL_VERIFIED, { userId: user._id, req, metadata: { via: 'login_2fa' } });
+    }
 
     if (trustDevice) {
         audit(AUDIT.DEVICE_TRUSTED, {
@@ -112,8 +135,27 @@ export const verifyLoginOtp = asyncHandler(async (req, res) => {
         accessToken,
         user: publicUser(user),
         deviceTrusted: trustDevice,
+        ...(result.factor?.method === 'recovery' ? { recoveryCodesRemaining: result.factor.recoveryCodesRemaining } : {}),
     });
 });
+
+/**
+ * A recovery code was spent. Audited on its own, and the holder is told on
+ * every channel: using one is normal after losing a phone, and alarming when
+ * it was not them.
+ */
+const reportRecoveryCodeUse = async (user, req, remaining) => {
+    audit(AUDIT.TOTP_RECOVERY_CODE_USED, { userId: user._id, req, metadata: { remaining } });
+    notifyUser(
+        user._id,
+        'Security',
+        'A recovery code was used',
+        remaining > 0
+            ? `One of your PayPro recovery codes was just used. You have ${remaining} left. If this was not you, contact support now.`
+            : 'Your last PayPro recovery code was just used. Set up new ones from Account → Security. If this was not you, contact support now.',
+        { remaining }
+    ).catch(() => {});
+};
 
 export const resendLoginOtp = asyncHandler(async (req, res) => {
     const email = asEmail(req.body?.email);
@@ -159,16 +201,20 @@ export const resendLoginOtp = asyncHandler(async (req, res) => {
  * between verification and execution for the parameters to change.
  */
 export const verifyTransferOtp = asyncHandler(async (req, res) => {
-    const otp = asString(req.body?.otp, { maxLength: 10 });
+    const otp = asString(req.body?.otp, { maxLength: 20 });
     if (!otp) return res.status(400).json({ message: 'OTP is required' });
 
-    const sender = await User.findById(req.user.id).select('firstName email accountBalance preferences');
+    const sender = await User.findById(req.user.id).select('firstName email accountBalance balanceMinor preferences');
     if (!sender) return res.status(404).json({ message: 'User not found' });
 
     // Bound to the authenticated user's own email — not one supplied in the body.
-    const result = await consumeChallenge(sender.email, 'transfer', otp);
+    const pending = await Otp.findOne({ email: sender.email, purpose: 'transfer' }).sort({ createdAt: -1 });
+    const result = await consumeChallenge(sender.email, 'transfer', otp, { verify: factorVerifierFor(pending) });
     if (result.message) {
         return res.status(result.status).json({ message: result.message });
+    }
+    if (result.factor?.method === 'recovery') {
+        await reportRecoveryCodeUse(sender, req, result.factor.recoveryCodesRemaining);
     }
 
     const context = result.record.context || {};
@@ -183,11 +229,38 @@ export const verifyTransferOtp = asyncHandler(async (req, res) => {
     const recipient = await User.findById(recipientId).select('firstName');
     if (!recipient) return res.status(404).json({ message: 'Recipient not found' });
 
-    if (sender.accountBalance < amount) {
+    if (balanceMinorOf(sender) < toPaise(amount)) {
         return res.status(400).json({ message: 'Insufficient balance' });
     }
 
-    const outcome = await executeTransfer({ sender, recipient, amount });
+    /**
+     * Assess again after verification (plan.md §30.2.2).
+     *
+     * A verified OTP proves the account holder authorised this — so
+     * `twoFactorSatisfied` retires the step-up band, which has already been
+     * served by getting here. It proves nothing about the *destination*, so a
+     * hold or a block still stands: identity and intent are different questions,
+     * and 2FA only answers the first.
+     */
+    const gate = await gateTransfer({ sender, recipient, amount, req, twoFactorSatisfied: true });
+
+    if (gate.outcome === 'block') {
+        return res.status(403).json({
+            message: 'This transfer was blocked because it looked unusual. Contact support if this was you.',
+            code: 'TRANSFER_BLOCKED',
+            riskCaseId: String(gate.riskCase._id),
+        });
+    }
+
+    if (gate.outcome === 'hold') {
+        return res.status(202).json({
+            message: 'This transfer is being reviewed. No money has moved yet.',
+            code: 'TRANSFER_HELD',
+            riskCaseId: String(gate.riskCase._id),
+        });
+    }
+
+    const outcome = await executeTransfer({ sender, recipient, amount, risk: gate.risk });
     if (outcome.error) {
         return res.status(outcome.status).json({ message: outcome.error });
     }
@@ -196,7 +269,7 @@ export const verifyTransferOtp = asyncHandler(async (req, res) => {
         message: 'Transfer completed successfully',
         senderTransactionId: outcome.senderTx._id,
         recipientTransactionId: outcome.recipientTx._id,
-        balance: outcome.sender.accountBalance
+        balance: balanceOf(outcome.sender), balanceMinor: balanceMinorOf(outcome.sender)
     });
 });
 
@@ -215,6 +288,9 @@ export const resendTransferOtp = asyncHandler(async (req, res) => {
     const pending = await Otp.findOne({ email: sender.email, purpose: 'transfer' }).sort({ createdAt: -1 });
     if (!pending) {
         return res.status(400).json({ message: 'No pending transfer to verify. Please start again.' });
+    }
+    if (pending.context?.method === 'totp') {
+        return res.status(400).json({ message: 'This transfer is confirmed with your authenticator app. Nothing was emailed.', code: 'TOTP_CHALLENGE' });
     }
 
     const recipientId = asObjectId(pending.context?.recipientId);

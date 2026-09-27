@@ -1,4 +1,5 @@
 import axios from 'axios';
+import logger from './logger.js';
 
 /**
  * Server-side IP geolocation.
@@ -111,7 +112,7 @@ const getLocation = async (ip) => {
          * familiar place nor a suspicious one — it simply stops contributing a
          * location signal, leaving the device signals to decide.
          */
-        console.error('IP location lookup failed:', error.message);
+        logger.warn('IP location lookup failed', { error: error.message });
         return FALLBACK(ip);
     }
 };

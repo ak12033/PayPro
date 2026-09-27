@@ -9,6 +9,8 @@ import IconBadge from '../../components/ui/IconBadge';
 import { AmountInput, Field } from '../../components/ui/Field';
 import { DetailRow } from '../../components/ui/List';
 import WalletCard from '../../features/wallet/WalletCard';
+import VerifyEmailBanner from '../../features/account/VerifyEmailBanner';
+import VerifyEmailSheet from '../../features/account/VerifyEmailSheet';
 import { useAuth } from '../../context/AuthContext';
 import { paymentApi } from '../../services/api/endpoints/paymentApi';
 import { getErrorMessage } from '../../utils/errors';
@@ -49,11 +51,12 @@ import cn from '../../lib/cn';
  */
 const AddMoney = () => {
     const navigate = useNavigate();
-    const { userName, balance, fetchDashboardData } = useAuth();
+    const { userName, balance, balanceMinor, fetchDashboardData } = useAuth();
 
     const [amount, setAmount] = useState('');
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null); // { status, amount, message }
+    const [verifyOpen, setVerifyOpen] = useState(false);
 
     const numericAmount = Number(amount);
     const isValidAmount = Number.isFinite(numericAmount) && numericAmount > 0;
@@ -165,6 +168,12 @@ const AddMoney = () => {
 
             checkout.open();
         } catch (caught) {
+            // Refused before an order was created, so there is nothing to
+            // reassure about beyond "not charged" — ask for the code instead.
+            if (caught?.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+                setVerifyOpen(true);
+                return;
+            }
             setResult({
                 status: 'error',
                 message: getErrorMessage(
@@ -216,7 +225,9 @@ const AddMoney = () => {
         <div className="mx-auto max-w-md">
             <PageHeader title="Add money" back={ROUTES.HOME} />
 
-            <WalletCard userName={userName} balance={balance} className="mb-5" />
+            <VerifyEmailBanner className="mb-4" />
+
+            <WalletCard userName={userName} balanceMinor={balanceMinor} className="mb-5" />
 
             <div className="space-y-4">
                 <Field label="Amount" hint={`Current balance: ${formatCurrency(balance)}`}>
@@ -310,6 +321,8 @@ const AddMoney = () => {
                     Card details go straight to Razorpay. {APP_NAME} never sees them.
                 </p>
             </div>
+
+            <VerifyEmailSheet open={verifyOpen} onClose={() => setVerifyOpen(false)} />
         </div>
     );
 };

@@ -10,7 +10,8 @@ import {
     toStoredPlace,
     PROXIMITY,
 } from './locationService.js';
-import { evaluateLogin } from './riskEvaluationService.js';
+import { evaluateLogin, RISK_SIGNALS } from './riskEvaluationService.js';
+import { isStaffRole } from './totpService.js';
 import * as devices from './trustedDeviceService.js';
 import * as history from './loginHistoryService.js';
 import securityConfig from '../config/security.js';
@@ -100,6 +101,15 @@ export const assessLogin = async ({ user, req, declaredDevice }) => {
         impossibleTravel: travel,
         suspectedProxy: Boolean(location.suspectedProxy),
         userPreference2FA: Boolean(user.preferences?.twoFactorAuth),
+        /**
+         * Staff sign in to a console that can move other people's money, so a
+         * trusted device is not an exemption for them: every sign-in asks for
+         * the authenticator. Staff without one yet sign in as usual and are
+         * then held at enrolment by `requireStaffTotp`.
+         */
+        extraSignals: isStaffRole(user.role) && user.totp?.enabled
+            ? [{ code: RISK_SIGNALS.STAFF_ACCOUNT, weight: 0, detail: 'Staff account', mandatory: true }]
+            : [],
     });
 
     // Register the sighting only now, so the risk engine judged the device as it

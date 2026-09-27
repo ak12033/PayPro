@@ -10,6 +10,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app import database
 from app.config import ALLOWED_ORIGINS, ENVIRONMENT, MAX_REQUEST_BYTES
 from app.errors import ApiError
+from app.observability import init_error_tracking
 from app.routes import ai, assistant
 
 logging.basicConfig(
@@ -17,6 +18,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger("paypro-ai")
+
+# A no-op unless SENTRY_DSN is set (plan.md §39.2). Before the app is built, so
+# the SDK's FastAPI integration sees it.
+init_error_tracking(ENVIRONMENT)
 
 
 @asynccontextmanager

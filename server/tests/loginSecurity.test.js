@@ -126,7 +126,17 @@ const send = (path, body, { device = DEVICES.laptop, ip = '1.1.1.1' } = {}) =>
         .set('X-Forwarded-For', ip)
         .send({ ...body, deviceInfo: device.info });
 
-const signup = (options) => send('/api/auth/signup', CREDENTIALS, options);
+/**
+ * Signup now emails an address-verification code (plan.md §31.2.7). This
+ * suite's "no code was sent" assertions are about *login* challenges, so the
+ * mailer's record is cleared once signup returns — otherwise every one of them
+ * would count the verification email as a login code.
+ */
+const signup = async (options) => {
+    const res = await send('/api/auth/signup', CREDENTIALS, options);
+    sendOtp.mockClear();
+    return res;
+};
 
 const login = (options) =>
     send('/api/auth/login', { email: CREDENTIALS.email, password: CREDENTIALS.password }, options);

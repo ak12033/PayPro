@@ -36,7 +36,16 @@ Thumbs.db
 # did not cover — one `git add .` would have committed a live private key.
 *firebase-adminsdk*.json
 *service-account*.json
+*service_account*.json
+*serviceAccount*.json
 **/*firebase*adminsdk*.json
+
+# Private keys and certificates bundles. server/utils/secretHygiene.js looks
+# for the same names — keep the two lists in step.
+*.pem
+*.p12
+*.pfx
+*.key
 
 # Local working notes
 #

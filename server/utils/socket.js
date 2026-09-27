@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import config from '../config/env.js';
+import logger from './logger.js';
 
 let io = null;
 
@@ -63,7 +64,7 @@ export const initSocket = (server) => {
             socket.user = decoded; // Attaches { id: userId, email: userEmail }
             next();
         } catch (err) {
-            console.error('Socket authentication failed:', err.message);
+            logger.warn('Socket authentication failed', { error: err.message });
             return next(new Error('Authentication error: Invalid or expired token'));
         }
     });
@@ -73,10 +74,10 @@ export const initSocket = (server) => {
         const userRoom = `user:${userId}`;
         socket.join(userRoom);
         
-        console.log(`🔌 Client connected: User ${userId} joined room ${userRoom}`);
+        logger.debug('Socket connected', { userId, room: userRoom });
 
         socket.on('disconnect', () => {
-            console.log(`🔌 Client disconnected: User ${userId}`);
+            logger.debug('Socket disconnected', { userId });
         });
     });
 
@@ -102,7 +103,7 @@ export const emitToUser = (userId, eventName, payload) => {
         const roomName = `user:${userId}`;
         ioInstance.to(roomName).emit(eventName, payload);
     } catch (err) {
-        console.error(`Error emitting event ${eventName} to user ${userId}:`, err.message);
+        logger.error('Socket emit failed', { eventName, userId, error: err.message });
     }
 };
 

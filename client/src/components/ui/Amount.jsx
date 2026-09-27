@@ -38,25 +38,34 @@ const SIZES = {
     display: 'text-3xl sm:text-4xl',
 };
 
-/** Splits into integer and fraction so the two can be sized differently. */
-const splitAmount = (value) => {
-    const parts = new Intl.NumberFormat(CURRENCY_LOCALE, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).formatToParts(Math.abs(Number(value) || 0));
+const integerFormat = new Intl.NumberFormat(CURRENCY_LOCALE, { maximumFractionDigits: 0 });
 
-    const integer = parts
-        .filter((p) => p.type === 'integer' || p.type === 'group')
-        .map((p) => p.value)
-        .join('');
+/**
+ * Splits a magnitude in integer paise into rupees and paise so the two can be
+ * sized differently. Integer division, so the digits are exact — no float
+ * value ever passes through a rounding step on its way to the screen.
+ */
+const splitMinor = (absMinor) => ({
+    integer: integerFormat.format(Math.floor(absMinor / 100)),
+    fraction: String(absMinor % 100).padStart(2, '0'),
+});
 
-    const fraction = parts.find((p) => p.type === 'fraction')?.value ?? '00';
-
-    return { integer, fraction };
+/**
+ * The amount in paise. `minor` (an integer from the server's `*Minor` fields)
+ * wins; `value` in rupees is the fallback for callers that only have rupees,
+ * and is rounded to the nearest paisa once, here.
+ */
+const resolveMinor = (minor, value) => {
+    if (Number.isInteger(minor)) return minor;
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.round(n * 100) : 0;
 };
 
 const Amount = ({
+    /** Rupees. Prefer `minor` wherever the server supplies it. */
     value,
+    /** Integer paise (`amountMinor`, `balanceMinor`, …). Takes precedence over `value`. */
+    minor,
     /** 'in' | 'out' | null. Null means "a quantity", e.g. a balance. */
     direction = null,
     size = 'md',
@@ -65,14 +74,28 @@ const Amount = ({
     showFraction = true,
     className,
 }) => {
-    const { integer, fraction } = splitAmount(value);
+    const amountMinor = resolveMinor(minor, value);
+    const absMinor = Math.abs(amountMinor);
+    const { integer, fraction } = splitMinor(absMinor);
 
-    const sign = direction === 'out' ? '−' : direction === 'in' ? '+' : '';
+    /**
+     * A *quantity* below zero keeps its sign.
+     *
+     * Directional amounts are rendered as a magnitude plus an arrow-like sign,
+     * which is why `splitAmount` takes the absolute value. A balance has no
+     * direction, and dropping its sign turned an overdrawn −₹400 into "₹400" —
+     * telling someone who owes money that they have it (plan.md §4.4). Only a
+     * refund can take a balance below zero, but when one does, this is the
+     * number they look at first.
+     */
+    const negativeQuantity = direction === null && amountMinor < 0;
+
+    const sign = direction === 'out' || negativeQuantity ? '−' : direction === 'in' ? '+' : '';
     const resolvedTone =
         tone ??
-        (direction === 'out' ? 'negative' : direction === 'in' ? 'positive' : 'neutral');
+        (direction === 'out' || negativeQuantity ? 'negative' : direction === 'in' ? 'positive' : 'neutral');
 
-    const spoken = `${Math.abs(Number(value) || 0).toLocaleString(CURRENCY_LOCALE)} rupees${
+    const spoken = `${negativeQuantity ? 'minus ' : ''}${(absMinor / 100).toLocaleString(CURRENCY_LOCALE)} rupees${
         direction === 'out' ? ' sent' : direction === 'in' ? ' received' : ''
     }`;
 

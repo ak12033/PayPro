@@ -1,5 +1,6 @@
 import config from '../config/env.js';
 import { getRequestId, getRequestUserId } from '../middlewares/requestContext.js';
+import { reportError } from './errorTracking.js';
 
 /**
  * Minimal structured logger.
@@ -11,6 +12,12 @@ import { getRequestId, getRequestUserId } from '../middlewares/requestContext.js
  * a firehose.
  *
  * JSON lines in production, readable text in development.
+ *
+ * Pass a caught error as `err` (`logger.error('…', { err })`): the log line
+ * gets its message and stack, and error tracking gets the real Error, so the
+ * event groups by stack rather than by message text. Every `error`-level entry
+ * is forwarded to error tracking (utils/errorTracking.js), which is a no-op
+ * unless `SENTRY_DSN` is set.
  */
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
 const threshold = LEVELS[process.env.LOG_LEVEL] ?? (config.NODE_ENV === 'production' ? LEVELS.info : LEVELS.debug);
@@ -39,16 +46,34 @@ const redact = (value, depth = 0) => {
     return out;
 };
 
+/** An Error in `meta.err` becomes plain, loggable fields. */
+const serializeErr = (err) => (
+    err instanceof Error
+        ? { error: err.message, errorName: err.name, stack: err.stack }
+        : { error: String(err) }
+);
+
 const emit = (level, message, meta = {}) => {
+    const { err, ...rest } = meta ?? {};
+    const requestId = getRequestId();
+    const userId = getRequestUserId();
+
+    // Forwarded regardless of the log threshold: LOG_LEVEL controls noise in
+    // the log sink, not whether errors are tracked.
+    if (level === 'error') {
+        reportError({ message, err, context: redact(rest), requestId, userId });
+    }
+
     if (LEVELS[level] < threshold) return;
 
     const entry = {
         level,
         time: new Date().toISOString(),
         message,
-        requestId: getRequestId(),
-        userId: getRequestUserId(),
-        ...redact(meta),
+        requestId,
+        userId,
+        ...redact(rest),
+        ...(err !== undefined && serializeErr(err)),
     };
 
     // Drop empty correlation fields so dev output stays readable.

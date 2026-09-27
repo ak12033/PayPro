@@ -2,7 +2,9 @@ import React, { useEffect, useId, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import AuthLayout from './AuthLayout';
 import Button from '../../components/ui/Button';
-import OtpField from '../../components/forms/OtpField';
+import { toast } from 'react-hot-toast';
+import SecondFactorField from '../../components/forms/SecondFactorField';
+import { isCompleteFactor } from '../../lib/secondFactor';
 import { useAuth } from '../../context/AuthContext';
 import { authApi } from '../../services/api/endpoints/authApi';
 import { getErrorMessage } from '../../utils/errors';
@@ -42,6 +44,7 @@ const REASON_COPY = {
     impossible_travel: 'This sign-in is a long way from your last one.',
     suspected_proxy: 'This connection looks like a VPN or proxy.',
     user_preference_2fa: 'Your account asks for a code every time you sign in.',
+    staff_account: 'Staff accounts confirm every sign-in.',
 };
 
 const LoginVerify = () => {
@@ -55,6 +58,7 @@ const LoginVerify = () => {
     const [verifying, setVerifying] = useState(false);
     const [error, setError] = useState(null);
     const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
+    const viaApp = state?.method === 'totp';
 
     useEffect(() => {
         if (!state?.email) navigate(ROUTES.LOGIN, { replace: true });
@@ -67,7 +71,7 @@ const LoginVerify = () => {
     }, [cooldown]);
 
     const verify = async () => {
-        if (otp.length !== 6 || verifying) return;
+        if (!isCompleteFactor(otp) || verifying) return;
 
         setVerifying(true);
         setError(null);
@@ -80,6 +84,14 @@ const LoginVerify = () => {
                 trustDevice,
             });
             setToken(data.accessToken);
+            if (typeof data.recoveryCodesRemaining === 'number') {
+                toast(
+                    data.recoveryCodesRemaining > 0
+                        ? `Recovery code used. ${data.recoveryCodesRemaining} left — set up the app again from Account when you can.`
+                        : 'That was your last recovery code. Create new ones from Account → Security now.',
+                    { icon: '🔑', duration: 8000 }
+                );
+            }
             navigate(HOME_ROUTE, { replace: true });
         } catch (caught) {
             setError(getErrorMessage(caught, 'That code did not work.'));
@@ -104,14 +116,16 @@ const LoginVerify = () => {
 
     return (
         <AuthLayout
-            title="Check your email"
-            subtitle={`We sent a 6-digit code to ${maskEmail(state?.email) || 'your inbox'}.`}
+            title={viaApp ? 'Enter your authenticator code' : 'Check your email'}
+            subtitle={viaApp
+                ? 'Open your authenticator app and enter the 6-digit code for PayPro.'
+                : `We sent a 6-digit code to ${maskEmail(state?.email) || 'your inbox'}.`}
         >
             <p className="mb-5 rounded-card bg-surface-sunken px-3 py-2.5 text-center text-xs leading-5 text-text-secondary">
                 {explanation}
             </p>
 
-            <OtpField value={otp} onChange={setOtp} onSubmit={verify} error={error} />
+            <SecondFactorField method={state?.method} value={otp} onChange={setOtp} onSubmit={verify} error={error} />
 
             {/* A checkbox rather than a toggle: this is part of the form being
                 submitted, not a setting that takes effect the moment it moves. */}
@@ -141,13 +155,14 @@ const LoginVerify = () => {
                 fullWidth
                 className="mt-4"
                 loading={verifying}
-                disabled={otp.length !== 6}
+                disabled={!isCompleteFactor(otp)}
                 onClick={verify}
             >
                 Verify and sign in
             </Button>
 
-            <div className="mt-4 text-center">
+            {/* Nothing to resend when the code comes from an app. */}
+            {!viaApp && <div className="mt-4 text-center">
                 <button
                     type="button"
                     onClick={resend}
@@ -156,7 +171,7 @@ const LoginVerify = () => {
                 >
                     {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Send a new code'}
                 </button>
-            </div>
+            </div>}
 
             <button
                 type="button"

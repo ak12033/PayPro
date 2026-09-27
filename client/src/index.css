@@ -154,6 +154,16 @@
        not something accelerating in and out. */
     .animate-loader-orbit { animation: pp-loader-orbit 7s linear infinite; }
 
+    /* SplashScreen's indeterminate progress bar: a segment sliding across
+       the track while it widens and narrows. */
+    @keyframes pp-splash-progress {
+        0%   { transform: translateX(-120%); width: 30%; }
+        50%  { transform: translateX(110%); width: 40%; }
+        100% { transform: translateX(320%); width: 30%; }
+    }
+
+    .animate-splash-progress { animation: pp-splash-progress 1.4s var(--ease-in-out) infinite; }
+
     /* Staggers a list without a JS animation library: each row reads its own
        index off a CSS variable set inline. */
     .stagger > * {

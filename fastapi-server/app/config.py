@@ -3,7 +3,14 @@ import sys
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# ENV_FILE lets the env file live outside the source tree (plan.md §4.13).
+# Unset, python-dotenv finds `.env` exactly as before. Set in the process
+# environment, not inside a .env file — it decides which file is read.
+_env_file = os.getenv("ENV_FILE")
+if _env_file and not os.path.isfile(_env_file):
+    print(f"FATAL: ENV_FILE={_env_file} does not exist.", file=sys.stderr)
+    sys.exit(1)
+load_dotenv(_env_file or None)
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 

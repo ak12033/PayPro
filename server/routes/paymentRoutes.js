@@ -1,14 +1,16 @@
 import express from 'express';
 import authMiddleware from '../middlewares/authMiddleware.js';
+import { idempotency } from '../middlewares/idempotency.js';
+import { requireVerifiedEmail } from '../middlewares/requireVerifiedEmail.js';
 import { createOrder, verifyPayment, handleWebhook, refundPayment, getPaymentHistory } from '../controllers/paymentController.js';
 import { paymentLimiter } from '../middlewares/rateLimiters.js';
 
 const paymentRouter = express.Router();
 
-paymentRouter.post('/create-order', authMiddleware, paymentLimiter, createOrder);
+paymentRouter.post('/create-order', authMiddleware, paymentLimiter, requireVerifiedEmail, idempotency('topup-order'), createOrder);
 paymentRouter.post('/verify', authMiddleware, paymentLimiter, verifyPayment);
 paymentRouter.get('/history', authMiddleware, getPaymentHistory);
-paymentRouter.post('/refund', authMiddleware, paymentLimiter, refundPayment);
+paymentRouter.post('/refund', authMiddleware, paymentLimiter, idempotency('refund'), refundPayment);
 
 /**
  * The webhook is intentionally unauthenticated — Razorpay calls it. It is

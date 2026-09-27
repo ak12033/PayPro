@@ -44,7 +44,7 @@ const AuthLayout = ({ title, subtitle, children, footer }) => (
 
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center">
             <Link
-                to={ROUTES.LANDING}
+                to={ROUTES.WELCOME}
                 className="mx-auto mb-7 inline-flex items-center gap-2 rounded-control"
             >
                 <span

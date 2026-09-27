@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
-import AuthLayout from './AuthLayout';
+import AuthSplitLayout from './AuthSplitLayout';
 import Button from '../../components/ui/Button';
 import { Field, Input } from '../../components/ui/Field';
 import PasswordField from '../../components/forms/PasswordField';
@@ -13,12 +13,26 @@ import { isValidEmail } from '../../utils/validation';
 import { getPasswordStrength } from '../../utils/password';
 import { ROUTES, HOME_ROUTE } from '../../constants/routes';
 
+/** Left-panel tiles. */
+const HIGHLIGHTS = [
+    ['Onboarding', '~1 min', 'Quick setup'],
+    ['Verification', 'Instant', 'Email-ready flow'],
+    ['Sessions', 'Protected', 'Token auth'],
+];
+
+const STATUS_CARD = {
+    label: 'Account protection',
+    status: 'Enabled',
+    title: 'Secure by default',
+    body: 'Built-in validation, protected sessions, and verification flows help reduce risky access.',
+};
+
 /**
  * Create an account.
  *
- * Four fields, which is the true minimum the backend requires. Everything the
- * old screen wrapped around them — the feature list, the trust badges, the
- * gradient panel — is gone.
+ * Four fields, which is the true minimum the backend requires. The context
+ * panel beside them comes from AuthSplitLayout, shared with Login, and is
+ * hidden below `lg` so the form owns the screen on a phone.
  *
  * Validation is per-field and on submit, not on every keystroke. Telling
  * someone their email is invalid while they are still typing the domain is
@@ -87,17 +101,15 @@ const Signup = () => {
     };
 
     return (
-        <AuthLayout
-            title="Create your account"
-            subtitle="It takes about a minute."
-            footer={
-                <span className="text-text-muted">
-                    Already have an account?{' '}
-                    <Link to={ROUTES.LOGIN} className="font-medium text-accent-text">
-                        Sign in
-                    </Link>
-                </span>
-            }
+        <AuthSplitLayout
+            badge="Fast, verified onboarding"
+            eyebrow="Create your workspace"
+            headline="Start with a secure account setup."
+            description="Create your account, protect it with strong credentials, and get immediate access to your dashboard."
+            statusCard={STATUS_CARD}
+            highlights={HIGHLIGHTS}
+            title="Create account"
+            subtitle="Set up your account to access your secure workspace."
         >
             <form onSubmit={submit} className="space-y-4" noValidate>
                 {formError && (
@@ -135,7 +147,7 @@ const Signup = () => {
                     </Field>
                 </div>
 
-                <Field label="Email" required error={errors.email}>
+                <Field label="Email address" required error={errors.email}>
                     {(props) => (
                         <Input
                             type="email"
@@ -169,8 +181,21 @@ const Signup = () => {
                 <Button type="submit" variant="primary" size="lg" fullWidth loading={loading}>
                     Create account
                 </Button>
+
+                <div className="flex items-center gap-3 text-xs text-text-muted [@media(max-height:820px)]:hidden">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-center">Protected onboarding and secure session setup</span>
+                    <div className="h-px flex-1 bg-border" />
+                </div>
+
+                <p className="text-center text-sm text-text-muted">
+                    Already have an account?{' '}
+                    <Link to={ROUTES.LOGIN} className="font-semibold text-accent-text">
+                        Login
+                    </Link>
+                </p>
             </form>
-        </AuthLayout>
+        </AuthSplitLayout>
     );
 };
 

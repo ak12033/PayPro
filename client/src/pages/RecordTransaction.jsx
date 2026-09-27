@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Info } from 'lucide-react';
@@ -18,20 +18,14 @@ import {
 /**
  * Manual transaction entry.
  *
- * Kept working, kept out of the navigation. The audit recommendation is to
- * remove this feature; it is here because removing a working backend endpoint
- * from under existing users is not a decision a redesign should make silently.
- *
- * The problem with it, stated plainly on the screen itself: this writes a row
- * into the same ledger that records real wallet movements, so the transaction
- * history and the wallet balance can disagree with no way for the user to tell
- * which is right. In a product whose entire value proposition is "you can trust
- * these numbers", a user-writable ledger row is a hole in the foundation.
- *
- * If it stays, the correct fix is a schema-level `source: 'manual' | 'ledger'`
- * flag so manual entries can be visually separated and excluded from balance
- * reconciliation — a backend change, and therefore out of scope here. The
- * disclosure below is the honest interim.
+ * A note in the user's own history describing spending that happened outside
+ * PayPro — never a movement of money. `ledgerService.applyManualTransaction`
+ * writes the row with `settlement: 'none'`, which is what every balance and
+ * reconciliation query filters on to exclude it: the wallet balance and this
+ * form can no longer disagree, because this form cannot touch the balance at
+ * all. (It used to — `type: "income"` credited real, spendable balance for
+ * money that never moved. That defect is what `settlement: 'none'` closes.)
+ * The disclosure below states the current, accurate behaviour.
  */
 const RecordTransaction = () => {
     const navigate = useNavigate();
@@ -40,8 +34,21 @@ const RecordTransaction = () => {
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
     const [category, setCategory] = useState(TRANSACTION_CATEGORIES[0]);
+    const [categories, setCategories] = useState(TRANSACTION_CATEGORIES);
     const [submitting, setSubmitting] = useState(false);
     const [errors, setErrors] = useState({});
+
+    // The static fallback renders immediately; the canonical list (shared with
+    // the AI categoriser) replaces it once it arrives, so a slow network never
+    // blocks the form.
+    useEffect(() => {
+        transactionApi.getCategories()
+            .then(({ data }) => {
+                const names = (data.categories ?? []).map((c) => c.name);
+                if (names.length) setCategories(names);
+            })
+            .catch(() => {});
+    }, []);
 
     const numericAmount = Number(amount);
 
@@ -132,7 +139,7 @@ const RecordTransaction = () => {
                             onChange={(event) => setCategory(event.target.value)}
                             {...props}
                         >
-                            {TRANSACTION_CATEGORIES.map((option) => (
+                            {categories.map((option) => (
                                 <option key={option} value={option}>
                                     {option}
                                 </option>

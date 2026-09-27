@@ -23,6 +23,8 @@ const makeUser = (overrides = {}) => User.create({
     email: `u${new mongoose.Types.ObjectId()}@example.com`,
     password: 'hashed',
     accountBalance: 0,
+    // Every real write keeps the two columns in step; so must the fixture.
+    balanceMinor: Math.round((overrides.accountBalance ?? 0) * 100),
     ...overrides,
 });
 
@@ -195,10 +197,17 @@ describe('ledger: transferFunds', () => {
 });
 
 describe('ledger: manual transactions', () => {
-    it('debits and records the entry', async () => {
+    /**
+     * Regression: this used to call debitWallet/creditWallet like every other
+     * write path, which meant `POST /transactions/add` with
+     * `{type: "income", amount: 999999}` minted real spendable balance for
+     * money that never moved. A manual entry is a note, not a movement — it
+     * must never touch `accountBalance`.
+     */
+    it('records the entry without touching accountBalance', async () => {
         const user = await makeUser({ accountBalance: 500 });
 
-        const { user: updated, transaction } = await applyManualTransaction({
+        const { user: returned, transaction } = await applyManualTransaction({
             userId: user._id,
             description: 'Coffee',
             amount: 120,
@@ -207,25 +216,27 @@ describe('ledger: manual transactions', () => {
             icon: 'Utensils',
         });
 
-        expect(updated.accountBalance).toBe(380);
+        expect(returned.accountBalance).toBe(500);
+        expect((await User.findById(user._id)).accountBalance).toBe(500);
         expect(transaction.type).toBe('Debit');
+        expect(transaction.settlement).toBe('none');
+        expect(transaction.source).toBe('manual');
         expect(transaction.invoiceId).toMatch(/^AP/);
     });
 
-    it('will not let a manual debit overdraw the wallet', async () => {
+    it('never blocks on balance, since no money moves', async () => {
         const user = await makeUser({ accountBalance: 50 });
 
-        await expect(
-            applyManualTransaction({
-                userId: user._id,
-                description: 'Too much',
-                amount: 100,
-                type: 'Debit',
-                category: 'Food',
-                icon: 'Utensils',
-            })
-        ).rejects.toMatchObject({ code: 'INSUFFICIENT_FUNDS' });
+        const { transaction } = await applyManualTransaction({
+            userId: user._id,
+            description: 'Bigger than my wallet, recorded anyway',
+            amount: 100000,
+            type: 'Debit',
+            category: 'Food',
+            icon: 'Utensils',
+        });
 
+        expect(transaction.amount).toBe(100000);
         expect((await User.findById(user._id)).accountBalance).toBe(50);
     });
 });
@@ -248,5 +259,36 @@ describe('ledger: invoice ids', () => {
         const ids = (await Transaction.find({}).select('invoiceId')).map((t) => t.invoiceId);
         expect(ids).toHaveLength(25);
         expect(new Set(ids).size).toBe(25);
+    });
+});
+
+describe('ledger: the balance guard reads integer paise (plan.md §7.4 step 3)', () => {
+    it('spends a balance down to exactly zero through amounts a double cannot represent', async () => {
+        const user = await makeUser({ accountBalance: 0.3 });
+
+        expect(await debitWallet(user._id, 0.1)).not.toBeNull();
+        // The rupee column is now 0.19999999999999998. A guard on it refused
+        // the next debit of 0.20; the paise guard sees exactly 20.
+        expect(await debitWallet(user._id, 0.2)).not.toBeNull();
+
+        const after = await User.findById(user._id);
+        expect(after.balanceMinor).toBe(0);
+    });
+
+    it('refuses when balanceMinor is short, whatever the rupee column says', async () => {
+        const user = await makeUser({ accountBalance: 100, balanceMinor: 5000 });
+
+        expect(await debitWallet(user._id, 60)).toBeNull();
+        expect((await User.findById(user._id)).balanceMinor).toBe(5000);
+    });
+
+    it('keeps writing the rupee column in step, as the rollback path', async () => {
+        const user = await makeUser({ accountBalance: 10 });
+        await creditWallet(user._id, 2.5);
+        await debitWallet(user._id, 1.25);
+
+        const after = await User.findById(user._id);
+        expect(after.balanceMinor).toBe(1125);
+        expect(after.accountBalance).toBe(11.25);
     });
 });

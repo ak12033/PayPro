@@ -1,14 +1,21 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import User from '../models/User.js';
 import Session from '../models/Session.js';
+import Otp, { OTP_TTL_MS } from '../models/Otp.js';
 import { isValidEmail, validatePassword } from '../utils/validEmail.js';
+import sendOtp from '../utils/sendOtp.js';
+import { consumeChallenge } from '../services/twoFactorService.js';
 import {
     createSession,
     generateTokens,
     hashRefreshToken,
     REFRESH_COOKIE_OPTIONS,
     REFRESH_COOKIE_CLEAR_OPTIONS,
-    REFRESH_TOKEN_TTL_MS
+    REFRESH_TOKEN_TTL_MS,
+    CSRF_COOKIE_CLEAR_OPTIONS,
+    issueCsrfCookie,
+    verifyCsrf,
 } from '../utils/token.js';
 import { notifyUser } from '../services/notificationService.js';
 import { emitToUser } from '../utils/socket.js';
@@ -20,10 +27,14 @@ import { assessLogin, finalizeLogin, enrollDevice } from '../services/loginSecur
 import { issueLoginChallenge } from '../services/twoFactorService.js';
 import { RISK_SIGNALS } from '../services/riskEvaluationService.js';
 import { describePlace, toStoredPlace } from '../services/locationService.js';
+import { balanceOf, balanceMinorOf } from '../utils/money.js';
+import logger from '../utils/logger.js';
 
 // bcrypt cost. 10 is the library default; 12 is the current baseline for
 // credentials guarding money.
 const BCRYPT_ROUNDS = 12;
+
+const OTP_BCRYPT_ROUNDS = 10;
 
 const MAX_FAILED_LOGINS = 8;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
@@ -33,10 +44,55 @@ export const publicUser = (user) => ({
     firstName: user.firstName,
     lastName: user.lastName,
     email: user.email,
-    accountBalance: user.accountBalance,
+    accountBalance: balanceOf(user),
+    balanceMinor: balanceMinorOf(user),
     lastLoginLocation: user.lastLoginLocation,
-    preferences: user.preferences
+    preferences: user.preferences,
+    emailVerified: Boolean(user.emailVerified),
+    role: user.role ?? 'user',
+    totpEnabled: Boolean(user.totp?.enabled),
+    /** Phase 5: the Account screen shows whether identity is verified. The tier only, never KYC details. */
+    kycTier: user.kycTier ?? 'unverified',
 });
+
+/**
+ * Issue (or re-issue) an email-verification code (plan.md §31.2.7).
+ *
+ * One live code per address, like every other OTP purpose. Delivery is
+ * best-effort and never awaited in the request: an SMTP outage must not fail
+ * a signup, and the user can always ask for another code.
+ */
+const issueEmailVerification = async (user, req) => {
+    const otp = String(crypto.randomInt(100000, 1000000));
+    const otpHash = await bcrypt.hash(otp, OTP_BCRYPT_ROUNDS);
+
+    await Otp.deleteMany({ email: user.email, purpose: 'email_verification' });
+    await Otp.create({
+        email: user.email,
+        otpHash,
+        purpose: 'email_verification',
+        // Pinned to the account *and* the address it was sent to, so a code
+        // issued before an email change cannot verify the new address.
+        context: { userId: String(user._id), email: user.email },
+        expiry: new Date(Date.now() + OTP_TTL_MS),
+    });
+
+    sendOtp(user.email, otp, 'email_verification').catch((err) =>
+        logger.error('Email verification OTP delivery failed', { error: err.message })
+    );
+
+    audit(AUDIT.EMAIL_VERIFICATION_SENT, { userId: user._id, req });
+};
+
+/**
+ * Mark an address as proven. Conditional on the address still being the one
+ * that was proven — an email change racing a verification must not mark the
+ * *new* address verified on the strength of a code sent to the old one.
+ */
+export const markEmailVerified = (userId, email) => User.updateOne(
+    { _id: userId, email, emailVerified: { $ne: true } },
+    { $set: { emailVerified: true, emailVerifiedAt: new Date() } }
+);
 
 /**
  * What to tell the user about why they are being challenged.
@@ -57,7 +113,11 @@ const CHALLENGE_COPY = {
     [RISK_SIGNALS.IMPOSSIBLE_TRAVEL]: 'This sign-in is a long way from your last one.',
     [RISK_SIGNALS.SUSPECTED_PROXY]: 'This connection looks like a VPN or proxy.',
     [RISK_SIGNALS.USER_PREFERENCE]: 'Your account asks for a code every time you sign in.',
+    [RISK_SIGNALS.STAFF_ACCOUNT]: 'Staff accounts confirm every sign-in.',
 };
+
+/** Routine challenges the holder asked for (or their role requires) are not news. */
+const ROUTINE_CHALLENGES = new Set([RISK_SIGNALS.USER_PREFERENCE, RISK_SIGNALS.STAFF_ACCOUNT]);
 
 const explainChallenge = (risk) => {
     const primary = risk.mandatory[0]
@@ -123,6 +183,17 @@ export const register = asyncHandler(async (req, res) => {
     await enrollDevice({ user, req, declaredDevice: req.body?.deviceInfo });
 
     audit(AUDIT.REGISTER, { userId: user._id, req });
+
+    /**
+     * Signup still signs the user straight in — the account is usable for
+     * everything that does not depend on owning the address. Only outgoing
+     * money movement waits on the code (requireVerifiedEmail). Blocking the
+     * whole app behind an email round trip would lose people at the first
+     * screen for a check that only matters once money is involved.
+     */
+    await issueEmailVerification(user, req).catch((err) =>
+        logger.error('Could not issue email verification', { error: err.message })
+    );
 
     res.status(201).json({
         message: 'Registration successful',
@@ -208,7 +279,7 @@ export const login = asyncHandler(async (req, res) => {
     const { risk, location } = assessment;
 
     if (risk.require2FA) {
-        const { challengeId } = await issueLoginChallenge(user, {
+        const { challengeId, method } = await issueLoginChallenge(user, {
             prints: assessment.prints,
             deviceId: assessment.device?._id,
             loginHistoryId: assessment.loginHistoryId,
@@ -223,7 +294,7 @@ export const login = asyncHandler(async (req, res) => {
         // security-relevant happened. A code prompt caused purely by their own
         // "always ask" setting is not news, and alert fatigue is what makes
         // people ignore the alert that matters.
-        if (explanation.code !== RISK_SIGNALS.USER_PREFERENCE) {
+        if (!ROUTINE_CHALLENGES.has(explanation.code)) {
             notifyUser(
                 user._id,
                 'Security',
@@ -246,8 +317,12 @@ export const login = asyncHandler(async (req, res) => {
         });
 
         return res.status(403).json({
-            message: `${explanation.message} We sent a verification code to ${user.email}.`,
+            message: method === 'totp'
+                ? `${explanation.message} Enter the code from your authenticator app.`
+                : `${explanation.message} We sent a verification code to ${user.email}.`,
             require2FA: true,
+            // 'totp' → authenticator app or a recovery code; 'email' → the emailed code.
+            method,
             email: user.email,
             // Binds the verification request to this challenge — see
             // twoFactorService for why a code alone is not enough.
@@ -277,6 +352,26 @@ export const login = asyncHandler(async (req, res) => {
 });
 
 export const refresh = asyncHandler(async (req, res) => {
+    /**
+     * CSRF check first, before touching the refresh token at all.
+     *
+     * This route rotates a refresh token — a write — and used to be a GET
+     * with no defence beyond CORS, which doesn't apply here: a cross-site
+     * form post or `<img>` tag carries the httpOnly cookie regardless of
+     * CORS, since CORS only governs whether the *response* can be read, not
+     * whether the request is sent. See utils/token.js for the double-submit
+     * design. A request with no cookie at all (never logged in, or the
+     * pre-Phase-2 session predates this cookie) still gets the ordinary
+     * "session expired" response below, not a CSRF-specific one — the two
+     * failure modes look identical to the client on purpose, so a caller
+     * probing for which check failed learns nothing.
+     */
+    if (!verifyCsrf(req)) {
+        res.clearCookie('refreshToken', REFRESH_COOKIE_CLEAR_OPTIONS);
+        res.clearCookie('csrfToken', CSRF_COOKIE_CLEAR_OPTIONS);
+        return res.status(401).json({ message: 'Session expired or invalid' });
+    }
+
     const refreshToken = asString(req.cookies?.refreshToken, { maxLength: 200 });
     if (!refreshToken) {
         return res.status(401).json({ message: 'No refresh token provided' });
@@ -334,12 +429,14 @@ export const refresh = asyncHandler(async (req, res) => {
         }
 
         res.clearCookie('refreshToken', REFRESH_COOKIE_CLEAR_OPTIONS);
+        res.clearCookie('csrfToken', CSRF_COOKIE_CLEAR_OPTIONS);
         return res.status(401).json({ message: 'Session expired or invalid' });
     }
 
     const user = await User.findById(session.userId);
     if (!user) {
         res.clearCookie('refreshToken', REFRESH_COOKIE_CLEAR_OPTIONS);
+        res.clearCookie('csrfToken', CSRF_COOKIE_CLEAR_OPTIONS);
         return res.status(401).json({ message: 'Session expired or invalid' });
     }
 
@@ -356,6 +453,10 @@ export const refresh = asyncHandler(async (req, res) => {
     await Session.updateOne({ _id: session._id }, { $set: { replacedBy: newHash } });
 
     res.cookie('refreshToken', plainRefreshToken, REFRESH_COOKIE_OPTIONS);
+    // Rotate the CSRF cookie alongside the refresh token, for the same reason
+    // the refresh token itself rotates: a captured value should stop working
+    // the next time the legitimate client uses the flow.
+    issueCsrfCookie(res);
     res.status(200).json({ accessToken });
 });
 
@@ -374,6 +475,7 @@ export const logout = asyncHandler(async (req, res) => {
     }
 
     res.clearCookie('refreshToken', REFRESH_COOKIE_CLEAR_OPTIONS);
+    res.clearCookie('csrfToken', CSRF_COOKIE_CLEAR_OPTIONS);
     res.status(200).json({ message: 'Logged out successfully' });
 });
 
@@ -394,6 +496,7 @@ export const logoutAll = asyncHandler(async (req, res) => {
     );
     audit(AUDIT.LOGOUT_ALL, { userId: req.user.id, req });
     res.clearCookie('refreshToken', REFRESH_COOKIE_CLEAR_OPTIONS);
+    res.clearCookie('csrfToken', CSRF_COOKIE_CLEAR_OPTIONS);
     res.status(200).json({ message: 'All sessions revoked' });
 });
 
@@ -409,4 +512,154 @@ export const listSessions = asyncHandler(async (req, res) => {
         .lean();
 
     res.status(200).json({ sessions });
+});
+
+/** Re-send the signup verification code to the signed-in user's address. */
+export const sendEmailVerification = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user.id).select('email emailVerified');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (user.emailVerified) {
+        return res.status(200).json({ message: 'Your email is already verified.', emailVerified: true });
+    }
+
+    await issueEmailVerification(user, req);
+    res.status(200).json({ message: `We sent a verification code to ${user.email}.`, emailVerified: false });
+});
+
+/** Confirm the address with the code from the email. */
+export const verifyEmail = asyncHandler(async (req, res) => {
+    const otp = asString(req.body?.otp, { maxLength: 10 });
+    if (!otp) return res.status(400).json({ message: 'Verification code is required' });
+
+    const user = await User.findById(req.user.id).select('email emailVerified');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (user.emailVerified) {
+        return res.status(200).json({ message: 'Your email is already verified.', emailVerified: true });
+    }
+
+    const result = await consumeChallenge(user.email, 'email_verification', otp);
+    if (result.message) {
+        return res.status(result.status).json({ message: result.message });
+    }
+
+    // The code must belong to this account and to the address it currently
+    // holds. `consumeChallenge` keys on email alone, which is not enough on
+    // its own: the same address could have been released and re-registered.
+    const context = result.record.context ?? {};
+    if (context.userId !== String(user._id) || context.email !== user.email) {
+        return res.status(400).json({ message: 'This code is no longer valid. Please request a new one.' });
+    }
+
+    await markEmailVerified(user._id, user.email);
+    audit(AUDIT.EMAIL_VERIFIED, { userId: user._id, req, metadata: { via: 'signup_code' } });
+    emitToUser(String(user._id), 'profile_updated', { user: { emailVerified: true } });
+
+    res.status(200).json({ message: 'Email verified.', emailVerified: true });
+});
+
+/**
+ * Request a password reset code.
+ *
+ * There was previously no way to recover a forgotten password at all — a user
+ * locked out of their own credentials was locked out of a wallet with real
+ * money in it, with no self-service path back in.
+ *
+ * Always answers 200 regardless of whether the address exists: a different
+ * response for an unknown email turns this unauthenticated route into an
+ * account-existence oracle.
+ */
+export const forgotPassword = asyncHandler(async (req, res) => {
+    const email = asEmail(req.body?.email);
+    if (!email) return res.status(400).json({ message: 'Email is required' });
+
+    const user = await User.findOne({ email });
+
+    if (user) {
+        const otp = String(crypto.randomInt(100000, 1000000));
+        const otpHash = await bcrypt.hash(otp, OTP_BCRYPT_ROUNDS);
+
+        // Only one live reset challenge at a time, same as login/transfer.
+        await Otp.deleteMany({ email, purpose: 'password_reset' });
+        await Otp.create({
+            email,
+            otpHash,
+            purpose: 'password_reset',
+            context: { userId: String(user._id) },
+            expiry: new Date(Date.now() + OTP_TTL_MS)
+        });
+
+        sendOtp(email, otp, 'password_reset').catch((err) =>
+            logger.error('Password reset OTP delivery failed', { error: err.message })
+        );
+
+        audit(AUDIT.PASSWORD_RESET_REQUESTED, { userId: user._id, req, outcome: 'success' });
+    }
+
+    res.status(200).json({ message: 'If that account exists, a verification code has been sent to it.' });
+});
+
+/**
+ * Complete a password reset: verify the code, set the new password, and treat
+ * it the same way a credential compromise would be treated — every existing
+ * session (and every access token minted before this moment, via
+ * `tokenVersion`) is revoked, since the whole scenario this exists for is "I
+ * am not sure who else has my password".
+ */
+export const resetPassword = asyncHandler(async (req, res) => {
+    const email = asEmail(req.body?.email);
+    const otp = asString(req.body?.otp, { maxLength: 10 });
+    const password = typeof req.body?.password === 'string' ? req.body.password : null;
+
+    if (!email || !otp) {
+        return res.status(400).json({ message: 'Email and verification code are required' });
+    }
+
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.ok) {
+        return res.status(400).json({ message: passwordCheck.error });
+    }
+
+    const result = await consumeChallenge(email, 'password_reset', otp);
+    if (result.message) {
+        return res.status(result.status).json({ message: result.message });
+    }
+
+    const userId = result.record.context?.userId;
+    const user = userId ? await User.findById(userId).select('+password') : null;
+    if (!user) {
+        return res.status(400).json({ message: 'Could not reset password. Please request a new code.' });
+    }
+
+    user.password = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    // Bumping this rejects every access token minted before the reset,
+    // without waiting out its 15-minute expiry.
+    user.tokenVersion += 1;
+    user.failedLoginAttempts = 0;
+    user.lockUntil = null;
+    // The reset code was delivered to this address and read back, which is
+    // exactly the proof email verification asks for.
+    if (!user.emailVerified) {
+        user.emailVerified = true;
+        user.emailVerifiedAt = new Date();
+    }
+    await user.save();
+
+    // A password reset almost always means "I'm not sure who else has this
+    // password" — end every refresh-token session, not just revoke the
+    // access token.
+    await Session.deleteMany({ userId: user._id });
+
+    audit(AUDIT.PASSWORD_RESET_COMPLETED, { userId: user._id, req });
+
+    notifyUser(
+        user._id,
+        'Security',
+        'Your password was reset',
+        'Your PayPro password was just changed. If this was not you, contact support immediately.',
+        {}
+    ).catch(() => {});
+
+    res.status(200).json({ message: 'Password reset successful. Please sign in with your new password.' });
 });

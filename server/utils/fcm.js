@@ -1,5 +1,7 @@
 import admin from "firebase-admin";
 import config from "../config/env.js";
+import { resolveFirebaseCredential } from "./firebaseCredential.js";
+import logger from './logger.js';
 
 /**
  * Firebase Admin initialisation.
@@ -11,50 +13,34 @@ import config from "../config/env.js";
  * notification was silently swallowed by the "[MOCK PUSH]" branch. Meanwhile
  * `FIREBASE_SERVICE_ACCOUNT` was defined in env.js and never read.
  *
- * We now read the credentials from the environment (raw JSON or base64), which
- * works identically locally and on Vercel/Render, and fall back to Google's
- * Application Default Credentials.
+ * Credentials now come from the environment (inline JSON/base64), from a file
+ * kept outside the source tree, or from Google's Application Default
+ * Credentials — in that order; see `utils/firebaseCredential.js`.
  */
 let isFirebaseInitialized = false;
 
-const parseServiceAccount = (raw) => {
-    if (!raw) return null;
-    try {
-        // Support both a raw JSON string and a base64-encoded one, since many
-        // hosts mangle multi-line values.
-        const text = raw.trim().startsWith('{')
-            ? raw
-            : Buffer.from(raw, 'base64').toString('utf8');
-
-        const parsed = JSON.parse(text);
-        // Env vars frequently arrive with the newlines in the private key escaped.
-        if (parsed.private_key) {
-            parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
-        }
-        return parsed;
-    } catch (err) {
-        console.error('❌ FIREBASE_SERVICE_ACCOUNT could not be parsed:', err.message);
-        return null;
-    }
-};
-
 if (!admin.apps.length) {
-    const serviceAccount = parseServiceAccount(config.FIREBASE_SERVICE_ACCOUNT);
+    const credential = resolveFirebaseCredential({
+        FIREBASE_SERVICE_ACCOUNT: config.FIREBASE_SERVICE_ACCOUNT,
+        FIREBASE_SERVICE_ACCOUNT_FILE: config.FIREBASE_SERVICE_ACCOUNT_FILE,
+        GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    });
+    for (const error of credential.errors) logger.error('Firebase credential problem', { error });
 
     try {
-        if (serviceAccount) {
-            admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+        if (credential.serviceAccount) {
+            admin.initializeApp({ credential: admin.credential.cert(credential.serviceAccount) });
             isFirebaseInitialized = true;
-            console.log('✅ Firebase Admin initialized from FIREBASE_SERVICE_ACCOUNT');
-        } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+            logger.info('Firebase Admin initialized', { from: credential.source === 'file' ? 'FIREBASE_SERVICE_ACCOUNT_FILE' : 'FIREBASE_SERVICE_ACCOUNT' });
+        } else if (credential.source === 'adc') {
             admin.initializeApp({ credential: admin.credential.applicationDefault() });
             isFirebaseInitialized = true;
-            console.log('✅ Firebase Admin initialized from application default credentials');
+            logger.info('Firebase Admin initialized', { from: 'application default credentials' });
         } else {
-            console.warn('⚠️  Firebase Admin not configured — push notifications will be mocked.');
+            logger.warn('Firebase Admin not configured; push notifications will be mocked');
         }
     } catch (error) {
-        console.error('❌ Firebase Admin initialization error:', error.message);
+        logger.error('Firebase Admin initialization error', { error: error.message });
     }
 } else {
     isFirebaseInitialized = true;
@@ -93,7 +79,7 @@ export const sendPushNotification = async (tokens, payload) => {
     if (!tokens || tokens.length === 0) return { success: true, failedTokens: [] };
 
     if (!isFirebaseInitialized) {
-        console.log(`[MOCK PUSH] ${tokens.length} device(s):`, payload?.title);
+        logger.debug('Mock push', { devices: tokens.length, title: payload?.title });
         return { success: true, mock: true, failedTokens: [] };
     }
 
@@ -140,7 +126,7 @@ export const sendPushNotification = async (tokens, payload) => {
                 if (PERMANENT_FAILURES.has(code)) {
                     failedTokens.push(tokens[idx]);
                 } else {
-                    console.error('FCM transient error:', code, resp.error?.message);
+                    logger.warn('FCM transient error', { code, error: resp.error?.message });
                 }
             });
         }
@@ -152,7 +138,7 @@ export const sendPushNotification = async (tokens, payload) => {
             failedTokens,
         };
     } catch (error) {
-        console.error('❌ Error sending push notification:', error.message);
+        logger.error('Error sending push notification', { error: error.message });
         return { success: false, error: error.message, failedTokens: [] };
     }
 };

@@ -6,6 +6,8 @@ import Card, { CardHeader } from '../../components/ui/Card';
 import EmptyState from '../../components/feedback/EmptyState';
 import ErrorState from '../../components/feedback/ErrorState';
 import Skeleton from '../../components/ui/Skeleton';
+import ChartDataTable from '../../components/ui/ChartDataTable';
+import { formatDate } from '../../utils/formatters';
 import { AREA_FILL_OPACITY, SPARKLINE_STROKE_WIDTH, VIZ_SERIES } from '../../lib/chartTheme';
 
 /**
@@ -38,9 +40,9 @@ const SuccessRateKpi = ({ paymentsStatus, loading, error, onRetry }) => {
 
     const summary = paymentsStatus?.summary;
     const decided = summary ? summary.captured + summary.failed : 0;
-    const sparkline = (paymentsStatus?.series ?? [])
-        .map((point) => point.successRate)
-        .filter((value) => value !== null && value !== undefined);
+    const ratedPoints = (paymentsStatus?.series ?? [])
+        .filter((point) => point.successRate !== null && point.successRate !== undefined);
+    const sparkline = ratedPoints.map((point) => point.successRate);
 
     const changePct = summary?.successRateChangePct;
     const hasChange = changePct !== null && changePct !== undefined;
@@ -88,7 +90,7 @@ const SuccessRateKpi = ({ paymentsStatus, loading, error, onRetry }) => {
                         )}
 
                         {sparkline.length > 1 && (
-                            <div className="mt-4 h-14 w-full">
+                            <div className="mt-4 h-14 w-full" aria-hidden="true">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <AreaChart
                                         data={sparkline.map((v) => ({ v }))}
@@ -111,6 +113,17 @@ const SuccessRateKpi = ({ paymentsStatus, loading, error, onRetry }) => {
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
+                        )}
+
+                        {ratedPoints.length > 1 && (
+                            <ChartDataTable
+                                caption="Payment success rate by period"
+                                rows={ratedPoints}
+                                columns={[
+                                    { key: 'date', header: 'Period', render: (p) => formatDate(p.date) },
+                                    { key: 'rate', header: 'Success rate', render: (p) => `${p.successRate}%` },
+                                ]}
+                            />
                         )}
                     </>
                 )}

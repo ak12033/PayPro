@@ -1,4 +1,4 @@
-import { ShieldAlert, ArrowLeftRight, Wallet, Bell, Clock } from 'lucide-react';
+import { ShieldAlert, ArrowLeftRight, Wallet, Bell, Clock, BadgeCheck } from 'lucide-react';
 
 /**
  * Notification taxonomy.
@@ -38,6 +38,18 @@ export const NOTIFICATION_KINDS = {
         label: 'Payments',
         icon: Wallet,
         tone: 'positive',
+        priority: 1,
+        sticky: false,
+    },
+    /**
+     * Identity verification and bank-account outcomes (Phase 5). Not mutable
+     * on the server, and ranked with money: "action needed on your
+     * verification" is something the holder has to act on.
+     */
+    Account: {
+        label: 'Account',
+        icon: BadgeCheck,
+        tone: 'info',
         priority: 1,
         sticky: false,
     },

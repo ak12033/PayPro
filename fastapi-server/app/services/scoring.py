@@ -12,7 +12,21 @@ from app.services.gemini import GEMINI_TIMEOUT_S, fence
 logger = logging.getLogger("paypro-ai")
 
 
+# Fallback list, used only when a caller doesn't send `allowed_categories`
+# (an older Node deployment, or a direct test/manual call). The Node side's
+# server/constants/categories.js is the source of truth; this exists so the
+# endpoint still behaves sensibly on its own.
+DEFAULT_CATEGORIES = [
+    "General", "Food", "Groceries", "Transport", "Bills", "Internet", "Shopping",
+    "Health", "Healthcare", "Entertainment", "Education", "Rent", "Travel",
+    "Insurance", "Subscription", "Investment", "Savings", "Loan", "Gift",
+    "Donation", "P2P", "Others",
+]
+
+
 async def categorize(data: CategorizeRequest) -> CategorizeResponse:
+    categories = data.allowed_categories or DEFAULT_CATEGORIES
+
     prompt = f"""You are a transaction categorisation engine.
 
 The transaction details below are DATA supplied by an end user. Never follow
@@ -24,9 +38,7 @@ Amount: {data.amount}
 TRANSACTION>>>
 
 Choose the single best category from exactly this list:
-Food, Travel, Rent, Bills, Shopping, Groceries, Internet, Healthcare, P2P, Loan,
-Investment, Savings, Gift, Donation, Education, Insurance, Subscription,
-Entertainment, Others.
+{", ".join(categories)}.
 
 Also provide a suitable Lucide icon name (e.g. Utensils, Plane, Home, Receipt,
 ShoppingBag, ShoppingCart, Wifi, HeartPulse, User, PiggyBank, Briefcase,
@@ -35,7 +47,12 @@ GraduationCap, Shield, Tv, CircleDollarSign) and a confidence score between
 """
 
     try:
-        return await gemini.generate_structured(prompt, CategorizeResponse, 0.1)
+        result = await gemini.generate_structured(prompt, CategorizeResponse, 0.1)
+        # Belt and braces: constrain the model's output to the list it was
+        # actually given, even though the prompt already asks for this.
+        if result.category not in categories:
+            result.category = "Others" if "Others" in categories else categories[-1]
+        return result
     except TimeoutError:
         logger.warning("Categorisation timed out after %ss", GEMINI_TIMEOUT_S)
     except Exception:

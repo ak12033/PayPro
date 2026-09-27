@@ -37,6 +37,8 @@ export const RISK_SIGNALS = {
     IMPOSSIBLE_TRAVEL: 'impossible_travel',
     SUSPECTED_PROXY: 'suspected_proxy',
     USER_PREFERENCE: 'user_preference_2fa',
+    /** A staff account with an authenticator: challenged on every sign-in (plan.md §28.3 rule 5). */
+    STAFF_ACCOUNT: 'staff_account',
 };
 
 const PROXIMITY_SIGNAL = {

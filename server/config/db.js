@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import config from "./env.js";
+import logger from "../utils/logger.js";
 
 /**
  * Connect to MongoDB.
@@ -10,9 +11,9 @@ import config from "./env.js";
  * timeout. A datastore we cannot reach is not a recoverable state at boot.
  */
 const connectDB = async () => {
-    mongoose.connection.on('connected', () => console.log('✅ Database connected'));
-    mongoose.connection.on('error', (err) => console.error('MongoDB error:', err.message));
-    mongoose.connection.on('disconnected', () => console.warn('⚠️  MongoDB disconnected'));
+    mongoose.connection.on('connected', () => logger.info('Database connected'));
+    mongoose.connection.on('error', (err) => logger.error('MongoDB error', { error: err.message }));
+    mongoose.connection.on('disconnected', () => logger.warn('MongoDB disconnected'));
 
     // Reject queries buffered against a down connection rather than hanging for
     // the default 10s and tying up a request slot.
@@ -41,7 +42,7 @@ const connectDB = async () => {
             retryWrites: true,
         });
     } catch (error) {
-        console.error('❌ Failed to connect to MongoDB:', error.message);
+        logger.error('Failed to connect to MongoDB', { error: error.message });
         process.exit(1);
     }
 };

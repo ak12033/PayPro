@@ -105,6 +105,12 @@ RAZORPAY_KEY_ID=your_razorpay_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
 FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"...","private_key":"..."}
+# 32 random bytes as hex each. Required in production. TOTP_ENCRYPTION_KEY encrypts
+# authenticator secrets; PII_ENCRYPTION_KEY encrypts PAN/bank numbers and KYC documents.
+TOTP_ENCRYPTION_KEY=
+PII_ENCRYPTION_KEY=
+# Development only: a demo biller that debits the wallet and pays nobody. Refused in production.
+ENABLE_DEMO_BILL_PAYMENTS=false
 ```
 
 ### 2. React Client (`/client/.env`)
@@ -144,6 +150,36 @@ ALLOWED_ORIGINS=http://localhost:5173
 FASTAPI_API_KEY=your_shared_secret
 ```
 See [`fastapi-server/README.md`](fastapi-server/README.md) for the full variable reference.
+
+---
+
+## 🔑 Secrets
+
+The filled-in `.env` files and the Firebase service-account key are gitignored, but ignored is not the same as safe: a checkout inside OneDrive, Dropbox or Google Drive copies them to the cloud and to every synced machine.
+
+**Where secrets should live:**
+
+| Secret | Keep it at | Point to it with |
+|---|---|---|
+| Firebase Admin key (JSON) | a folder outside the repo, e.g. `~/.secrets/paypro/firebase-admin.json` | `FIREBASE_SERVICE_ACCOUNT_FILE` (or inline via `FIREBASE_SERVICE_ACCOUNT`) |
+| `server/.env` | outside the repo, or in the repo only if the folder is not synced | `DOTENV_CONFIG_PATH=/path/to/paypro-api.env` (also honoured by `server/scripts/*`) |
+| `fastapi-server/.env` | same | `ENV_FILE=/path/to/paypro-ai.env` |
+| root `.env` (Docker Compose) | same | `docker compose --env-file /path/to/paypro.env up` |
+| `client/.env` | anywhere | values are `VITE_*` and end up in the public JS bundle, so nothing in it may be secret |
+
+**Checks.** `cd server && npm run secrets:check` fails if git tracks an env or credential file, a tracked file contains a private key, a credential file sits anywhere in the working tree, or the checkout is in a synced folder while holding secrets. CI runs it on every push. The API also checks at startup: it warns about a key inside the project, and in production it refuses to start when `FIREBASE_SERVICE_ACCOUNT_FILE`/`GOOGLE_APPLICATION_CREDENTIALS` points inside its own tree.
+
+**Rotating a leaked or replicated secret.** Assume anything that was ever in a synced folder is compromised. Rotate first, then move:
+
+1. **Firebase Admin key.** Google Cloud console → IAM & Admin → Service accounts → the `firebase-adminsdk` account → Keys → *Add key* (JSON). Save it outside the repo and set `FIREBASE_SERVICE_ACCOUNT_FILE`. Restart the API and confirm the log reads `Firebase Admin initialized from FIREBASE_SERVICE_ACCOUNT_FILE` and that a push arrives. Then **delete the old key** in the same Keys tab, and delete the old JSON file from disk and from the synced folder's online recycle bin.
+2. **`JWT_SECRET`.** Generate a new one and set it byte-identically in the API's and the AI service's env. Every session ends and users sign in again.
+3. **`FASTAPI_API_KEY`.** Generate a new one and set it in both services at the same time.
+4. **Razorpay.** Dashboard → Account & Settings → API Keys → *Regenerate*. Update `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` and the client's `VITE_RAZORPAY_KEY_ID`. Rotate `RAZORPAY_WEBHOOK_SECRET` under Webhooks.
+5. **`GEMINI_API_KEY`.** Google AI Studio → delete the old key, create a new one.
+6. **`EMAIL_PASS`** (Gmail app password). Google Account → Security → App passwords → revoke, then create a new one.
+7. **`MONGO_URI`.** Atlas → Database Access → change the user's password (or create a new user and delete the old one). Update both services.
+8. **`TOTP_ENCRYPTION_KEY` / `PII_ENCRYPTION_KEY`.** Not rotatable by simply replacing them: data encrypted under the old key becomes unreadable (every authenticator would need a Reset 2FA; every KYC document and PAN/bank number would be lost). Rotation needs a re-encryption pass that does not exist yet. Keep them in a secret manager and treat a leak as an incident.
+9. Run `npm run secrets:check` until it reports `CLEAN`.
 
 ---
 

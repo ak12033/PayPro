@@ -21,6 +21,7 @@ import { refreshSession } from '../services/auth/refreshSession';
 import { AUTH_EXPIRED_EVENT } from '../constants/app';
 import { PUBLIC_ROUTES, ROUTES } from '../constants/routes';
 import { RECENT_FETCH_LIMIT } from '../constants/transactions';
+import { balanceMinorOf, fromMinor } from '../lib/money';
 
 const AuthContext = createContext(null);
 
@@ -46,7 +47,13 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
     const [token, setTokenState] = useState(null);
     const [user, setUser] = useState(null);
-    const [balance, setBalance] = useState(0);
+    /**
+     * Held in integer paise (plan.md §7.4 step 3). `balance` in rupees is
+     * derived below for the screens that still do rupee arithmetic on it
+     * (form hints, "new balance" previews); anything that *renders* the
+     * balance should use `balanceMinor` with `<Amount minor>`.
+     */
+    const [balanceMinor, setBalanceMinor] = useState(0);
     const [recentTransactions, setRecentTransactions] = useState([]);
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
@@ -69,7 +76,7 @@ export const AuthProvider = ({ children }) => {
         persistAccessToken(null);
         setTokenState(null);
         setUser(null);
-        setBalance(0);
+        setBalanceMinor(0);
         setRecentTransactions([]);
     }, []);
 
@@ -87,7 +94,7 @@ export const AuthProvider = ({ children }) => {
         const { data: profile } = await userApi.getProfile();
 
         setUser(profile);
-        setBalance(profile.accountBalance ?? 0);
+        setBalanceMinor(balanceMinorOf(profile));
 
         /**
          * `/transactions/recent` is bounded server-side. It used to return the
@@ -197,8 +204,9 @@ export const AuthProvider = ({ children }) => {
             user,
             setUser,
             userName: user?.firstName ?? '',
-            balance,
-            setBalance,
+            balance: fromMinor(balanceMinor),
+            balanceMinor,
+            setBalanceMinor,
             recentTransactions,
             setRecentTransactions,
             fetchDashboardData,
@@ -210,7 +218,7 @@ export const AuthProvider = ({ children }) => {
             token,
             setToken,
             user,
-            balance,
+            balanceMinor,
             recentTransactions,
             fetchDashboardData,
             logout,

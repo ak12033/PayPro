@@ -35,6 +35,33 @@ export const authApi = {
     resendLoginOtp: ({ email }) => api.post('/auth/resend-login-otp', { email }),
 
     logout: () => api.post('/auth/logout'),
+
+    /** Always answers 200 regardless of whether the address exists — see the server-side comment. */
+    forgotPassword: ({ email }) => api.post('/auth/forgot-password', { email }),
+
+    resetPassword: ({ email, otp, password }) =>
+        api.post('/auth/reset-password', { email, otp, password }),
+
+    /**
+     * Email ownership (plan.md §31.2.7). Signup already sent the first code;
+     * these re-send it and confirm it. Both act on the signed-in account's own
+     * address — there is no email parameter to point them anywhere else.
+     */
+    sendEmailVerification: () => api.post('/auth/verify-email/send'),
+
+    verifyEmail: ({ otp }) => api.post('/auth/verify-email', { otp }),
+
+    /**
+     * Authenticator app (plan.md §31.2.4). `setup` returns the secret and the
+     * otpauth URI once; `enable` returns the recovery codes once. Removing the
+     * app or re-issuing codes needs the password and a current code.
+     */
+    getTotpStatus: () => api.get('/auth/totp'),
+    startTotpSetup: () => api.post('/auth/totp/setup'),
+    enableTotp: ({ code }) => api.post('/auth/totp/enable', { code }),
+    disableTotp: ({ currentPassword, code }) => api.post('/auth/totp/disable', { currentPassword, code }),
+    regenerateRecoveryCodes: ({ currentPassword, code }) =>
+        api.post('/auth/totp/recovery-codes', { currentPassword, code }),
 };
 
 export default authApi;

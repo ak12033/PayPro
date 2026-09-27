@@ -63,48 +63,51 @@ const SpendingChart = ({ sent = 0, received = 0, added = 0 }) => {
                     </div>
                 </div>
 
-                <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                        <Pie
-                            data={series}
-                            dataKey="value"
-                            innerRadius={56}
-                            outerRadius={78}
-                            paddingAngle={2}
-                            stroke="var(--color-surface)"
-                            strokeWidth={2}
-                            // Animation off: the chart re-animates on every
-                            // re-render otherwise, which on a page with a live
-                            // balance means it spins whenever anything updates.
-                            isAnimationActive={false}
-                            // Same hover language as the dashboard's category
-                            // donut: the hovered wedge brightens by the button's
-                            // own factor and the rest recede, rather than the
-                            // wedge changing to a different colour.
-                            onMouseEnter={(_, index) => setActiveIndex(index)}
-                            onMouseLeave={() => setActiveIndex(null)}
-                        >
-                            {series.map((item, index) => {
-                                const isActive = activeIndex === index;
-                                const isDimmed = activeIndex !== null && !isActive;
+                {/* The <dl> legend below is this chart's accessible form, so the SVG is hidden. */}
+                <div className="h-full w-full" aria-hidden="true">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie
+                                data={series}
+                                dataKey="value"
+                                innerRadius={56}
+                                outerRadius={78}
+                                paddingAngle={2}
+                                stroke="var(--color-surface)"
+                                strokeWidth={2}
+                                // Animation off: the chart re-animates on every
+                                // re-render otherwise, which on a page with a live
+                                // balance means it spins whenever anything updates.
+                                isAnimationActive={false}
+                                // Same hover language as the dashboard's category
+                                // donut: the hovered wedge brightens by the button's
+                                // own factor and the rest recede, rather than the
+                                // wedge changing to a different colour.
+                                onMouseEnter={(_, index) => setActiveIndex(index)}
+                                onMouseLeave={() => setActiveIndex(null)}
+                            >
+                                {series.map((item, index) => {
+                                    const isActive = activeIndex === index;
+                                    const isDimmed = activeIndex !== null && !isActive;
 
-                                return (
-                                    <Cell
-                                        key={item.name}
-                                        fill={item.token}
-                                        style={{
-                                            filter: isActive ? `brightness(${HOVER_BRIGHTNESS})` : 'none',
-                                            opacity: isDimmed ? DIMMED_OPACITY : 1,
-                                            transition:
-                                                'opacity var(--duration-fast) var(--ease-out), filter var(--duration-fast) var(--ease-out)',
-                                        }}
-                                    />
-                                );
-                            })}
-                        </Pie>
-                        <Tooltip content={<ChartTooltip total={total} />} />
-                    </PieChart>
-                </ResponsiveContainer>
+                                    return (
+                                        <Cell
+                                            key={item.name}
+                                            fill={item.token}
+                                            style={{
+                                                filter: isActive ? `brightness(${HOVER_BRIGHTNESS})` : 'none',
+                                                opacity: isDimmed ? DIMMED_OPACITY : 1,
+                                                transition:
+                                                    'opacity var(--duration-fast) var(--ease-out), filter var(--duration-fast) var(--ease-out)',
+                                            }}
+                                        />
+                                    );
+                                })}
+                            </Pie>
+                            <Tooltip content={<ChartTooltip total={total} />} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </div>
             </div>
 
             {/*

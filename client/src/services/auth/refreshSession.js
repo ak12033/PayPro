@@ -36,10 +36,25 @@ import { setAccessToken } from './tokenStore';
  * interceptor's stricter rule intact, which is right: once the app is running,
  * a request that carries no token is a bug, not a session to restore.
  */
+/**
+ * Reads the non-httpOnly `csrfToken` cookie the server pairs with the refresh
+ * cookie (see server/utils/token.js). The server compares this header against
+ * that same cookie — a double-submit check that a cross-site request cannot
+ * forge, because it can make the browser *send* the cookie but cannot *read*
+ * it to put a matching value in the header.
+ */
+const readCsrfCookie = () => {
+    const match = document.cookie.match(/(?:^|; )csrfToken=([^;]*)/);
+    return match ? decodeURIComponent(match[1]) : null;
+};
+
 export const refreshSession = async () => {
-    const { data } = await axios.get(`${API_BASE_URL}/auth/refresh`, {
+    const csrfToken = readCsrfCookie();
+
+    const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, null, {
         withCredentials: true,
         timeout: REFRESH_TIMEOUT_MS,
+        headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
     });
 
     const accessToken = data?.accessToken ?? null;

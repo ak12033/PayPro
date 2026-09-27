@@ -3,15 +3,19 @@ import Payment from '../models/Payment.js';
 import config from '../config/env.js';
 import { razorpayInstance, verifyRazorpaySignature, verifyWebhookSignature } from '../utils/razorpay.js';
 import crypto from 'crypto';
-import { notifyUser } from '../services/notificationService.js';
 import { emitToUser } from '../utils/socket.js';
-import { creditFromPayment, debitForRefund, LedgerError } from '../services/ledgerService.js';
-import { parseAmount, toPaise } from '../utils/money.js';
+import { debitForRefund, createLedgerEntry, LedgerError } from '../services/ledgerService.js';
+import { hashWebhookBody, recordWebhookEvent, markWebhookProcessed, markWebhookFailed, markWebhookIgnored } from '../services/webhookService.js';
+import { settleCapturedOrder, notifyOverdraft, processGatewayEvent } from '../services/paymentSettlementService.js';
+import { checkBalanceCeiling } from '../services/limitService.js';
+import { sendEmailAlert } from '../services/emailService.js';
+import { parseAmount, toPaise, newBalanceFields, balanceMinorOf } from '../utils/money.js';
 import { asString, asInt } from '../utils/sanitize.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { audit } from '../services/auditService.js';
 import { AUDIT } from '../models/AuditLog.js';
 import logger from '../utils/logger.js';
+import { TX_STATUS, TX_SOURCE, TX_SETTLEMENT } from '../constants/transactionStatus.js';
 
 export const createOrder = asyncHandler(async (req, res) => {
     /**
@@ -24,6 +28,18 @@ export const createOrder = asyncHandler(async (req, res) => {
         return res.status(400).json({ message: parsed.error });
     }
     const amount = parsed.value;
+
+    const account = await User.findById(req.user.id).select('accountBalance balanceMinor kycTier');
+    if (!account) return res.status(404).json({ message: 'User not found' });
+
+    try {
+        checkBalanceCeiling({ tier: account.kycTier, currentBalanceMinor: balanceMinorOf(account), amount });
+    } catch (err) {
+        if (err instanceof LedgerError) {
+            return res.status(err.status).json({ message: err.message });
+        }
+        throw err;
+    }
 
     const receipt = `rcpt_${crypto.randomBytes(8).toString('hex')}`;
 
@@ -44,6 +60,30 @@ export const createOrder = asyncHandler(async (req, res) => {
         receipt
     });
 
+    /**
+     * A PENDING ledger row from the moment checkout starts.
+     *
+     * Previously a top-up was invisible in Activity until it captured — if a
+     * user closed the tab mid-payment, or a webhook was delayed, there was no
+     * record at all of the attempt. This row never touches `accountBalance`
+     * (nothing here calls creditWallet); `creditFromPayment` transitions it to
+     * SUCCESS on capture, and the webhook's `payment.failed` handler below
+     * transitions it to FAILED.
+     */
+    await createLedgerEntry({
+        userId: req.user.id,
+        description: `Adding ₹${amount} via Razorpay`,
+        amount,
+        type: 'Credit',
+        category: 'Top Up',
+        icon: 'Wallet',
+        paymentRef: order.id,
+        source: TX_SOURCE.TOPUP,
+        settlement: TX_SETTLEMENT.SETTLED,
+        status: TX_STATUS.PENDING,
+        categorySource: 'system',
+    });
+
     res.status(200).json({
         success: true,
         orderId: order.id,
@@ -51,122 +91,6 @@ export const createOrder = asyncHandler(async (req, res) => {
         currency: order.currency
     });
 });
-
-/**
- * Credit the wallet for a captured order — exactly once.
- *
- * `/payments/verify` (called by the browser) and the Razorpay webhook both
- * settle the same order, and both used to do:
- *
- *     const payment = await Payment.findOne({ orderId });
- *     if (payment.status !== 'captured') {   // <-- read
- *         payment.status = 'captured';
- *         await payment.save();              // <-- write
- *         user.accountBalance += payment.amount;
- *     }
- *
- * When the webhook lands while the browser's verify call is in flight, both
- * reads see 'created', both pass the guard, and the user is credited twice for
- * one payment.
- *
- * The `findOneAndUpdate` below collapses that read-then-write into a single
- * atomic compare-and-set on `walletCredited`. Whichever caller wins the race
- * gets the document back and performs the credit; the loser gets null.
- */
-const settleCapturedOrder = async ({ orderId, paymentId, source }) => {
-    const payment = await Payment.findOneAndUpdate(
-        { orderId, walletCredited: { $ne: true } },
-        { $set: { status: 'captured', paymentId, walletCredited: true } },
-        { new: true }
-    );
-
-    if (!payment) {
-        return { alreadySettled: true };
-    }
-
-    try {
-        const { user, transaction } = await creditFromPayment({
-            userId: payment.userId,
-            amount: payment.amount,
-            description: `Added ₹${payment.amount} via Razorpay`,
-            paymentRef: payment.orderId
-        });
-
-        emitToUser(user._id.toString(), 'deposit_success', {
-            newBalance: user.accountBalance,
-            transaction
-        });
-
-        audit(AUDIT.TOPUP_CAPTURED, {
-            userId: user._id,
-            target: { type: 'Payment', id: orderId },
-            metadata: { amount: payment.amount, source }
-        });
-
-        notifyUser(
-            user._id,
-            'Payment',
-            'Wallet Top-Up Successful',
-            `Your wallet has been credited with ₹${payment.amount}.`,
-            { amount: payment.amount, orderId }
-        ).catch((err) => console.error('Top-up notification failed:', err.message));
-
-        return { alreadySettled: false, user, transaction, payment };
-    } catch (err) {
-        // Release the claim so a webhook retry can settle this order, instead of
-        // leaving it permanently flagged as credited with no money delivered.
-        await Payment.updateOne({ _id: payment._id }, { $set: { walletCredited: false } });
-        console.error(`Failed to credit wallet for order ${orderId} (${source}):`, err.message);
-        throw err;
-    }
-};
-
-/**
- * Debit the wallet for a processed refund — exactly once, using the same
- * compare-and-set pattern as the capture path.
- */
-const settleRefund = async ({ paymentId, refundId, amount }) => {
-    const payment = await Payment.findOneAndUpdate(
-        { paymentId, walletCredited: true, walletDebitedOnRefund: { $ne: true } },
-        { $set: { status: 'refunded', refundId, walletDebitedOnRefund: true } },
-        { new: true }
-    );
-
-    if (!payment) return { alreadySettled: true };
-
-    try {
-        // Prefer the gateway's authoritative refunded amount when present:
-        // a partial refund would otherwise debit the full order value.
-        const refundedRupees = Number.isFinite(Number(amount))
-            ? Number(amount) / 100
-            : payment.amount;
-
-        const { user, transaction } = await debitForRefund({
-            userId: payment.userId,
-            amount: refundedRupees,
-            description: `Refund processed for order ${payment.orderId}`,
-            paymentRef: payment.orderId
-        });
-
-        emitToUser(user._id.toString(), 'wallet_update', {
-            newBalance: user.accountBalance,
-            transaction
-        });
-
-        notifyUser(
-            user._id,
-            'Payment',
-            'Refund Processed',
-            `A refund of ₹${refundedRupees} has been processed for your top-up.`,
-            { amount: refundedRupees, orderId: payment.orderId }
-        ).catch(() => {});
-
-        return { alreadySettled: false, user, transaction };
-    } catch (err) {
-        await Payment.updateOne({ _id: payment._id }, { $set: { walletDebitedOnRefund: false } });
-        throw err;
-    }
-};
 
 export const verifyPayment = asyncHandler(async (req, res) => {
     const orderId = asString(req.body?.razorpay_order_id, { maxLength: 120 });
@@ -191,18 +115,18 @@ export const verifyPayment = asyncHandler(async (req, res) => {
     const result = await settleCapturedOrder({ orderId, paymentId, source: 'verify' });
 
     if (result.alreadySettled) {
-        const current = await User.findById(req.user.id).select('accountBalance');
+        const current = await User.findById(req.user.id).select('accountBalance balanceMinor');
         return res.status(200).json({
             success: true,
             message: 'Payment already verified',
-            newBalance: current?.accountBalance
+            ...newBalanceFields(current)
         });
     }
 
     res.status(200).json({
         success: true,
         message: 'Payment verified and balance updated',
-        newBalance: result.user.accountBalance
+        ...newBalanceFields(result.user)
     });
 });
 
@@ -211,7 +135,7 @@ export const handleWebhook = asyncHandler(async (req, res) => {
     const secret = config.RAZORPAY_WEBHOOK_SECRET;
 
     if (!secret) {
-        console.error('RAZORPAY_WEBHOOK_SECRET is not configured; rejecting webhook.');
+        logger.error('RAZORPAY_WEBHOOK_SECRET is not configured; rejecting webhook');
         return res.status(500).send('Webhook not configured');
     }
 
@@ -243,38 +167,47 @@ export const handleWebhook = asyncHandler(async (req, res) => {
         return res.status(400).send('Malformed webhook payload');
     }
 
-    const entity = event?.payload?.payment?.entity ?? event?.payload?.refund?.entity;
-    if (!entity) {
-        // Acknowledge unknown shapes so Razorpay stops retrying them.
-        return res.status(200).json({ status: 'ignored' });
+    /**
+     * Durable record + dedupe.
+     *
+     * The settlement paths below are already idempotent (compare-and-set on
+     * `walletCredited`/`walletDebitedOnRefund`), so a duplicate delivery was
+     * always *safe* — it just wasn't *visible*. This records every delivery
+     * so an outage or a stuck queue on the gateway side shows up as a gap in
+     * this collection rather than as silence, and gives an admin something
+     * concrete to replay. See services/webhookService.js for why the hash of
+     * the raw body, not a payload field, is the dedupe key.
+     */
+    const { duplicate, event: webhookEvent } = await recordWebhookEvent({
+        eventId: hashWebhookBody(req.body),
+        eventType: event?.event,
+        payload: event,
+        signatureValid: true,
+    });
+
+    if (duplicate) {
+        audit(AUDIT.WEBHOOK_DUPLICATE, { outcome: 'success', req, metadata: { eventType: event?.event } });
+        return res.status(200).json({ status: 'duplicate' });
     }
 
+    audit(AUDIT.WEBHOOK_RECEIVED, { outcome: 'success', req, metadata: { eventType: event?.event } });
+
     try {
-        if (event.event === 'payment.captured') {
-            await settleCapturedOrder({
-                orderId: entity.order_id,
-                paymentId: entity.id,
-                source: 'webhook'
-            });
-        } else if (event.event === 'payment.failed') {
-            await Payment.updateOne(
-                { orderId: entity.order_id, status: 'created' },
-                { $set: { status: 'failed', paymentId: entity.id } }
-            );
-        } else if (event.event === 'refund.processed') {
-            await settleRefund({
-                paymentId: entity.payment_id,
-                refundId: entity.id,
-                amount: entity.amount
-            });
+        const outcome = await processGatewayEvent(event, { source: 'webhook' });
+        if (outcome === 'ignored') {
+            // Acknowledge unknown shapes so Razorpay stops retrying them.
+            await markWebhookIgnored(webhookEvent._id);
+            return res.status(200).json({ status: 'ignored' });
         }
     } catch (err) {
-        // Return 5xx so Razorpay retries. The atomic guards above make the
-        // retry safe: a replayed event is a no-op.
-        console.error('Webhook processing error:', err);
+        // Return 5xx so Razorpay retries. The atomic guards in
+        // paymentSettlementService make the retry safe: a replayed event is a no-op.
+        logger.error('Webhook processing error', { err });
+        await markWebhookFailed(webhookEvent._id, err.message);
         return res.status(500).json({ status: 'error' });
     }
 
+    await markWebhookProcessed(webhookEvent._id);
     res.status(200).json({ status: 'ok' });
 });
 
@@ -312,12 +245,13 @@ export const refundPayment = asyncHandler(async (req, res) => {
             amount: toPaise(payment.amount)
         });
 
-        const { user, transaction } = await debitForRefund({
+        const { user, transaction, overdraft } = await debitForRefund({
             userId: req.user.id,
             amount: payment.amount,
             description: `Refunded ₹${payment.amount}`,
             paymentRef: payment.orderId
         });
+        notifyOverdraft(user, overdraft);
 
         await Payment.updateOne(
             { _id: payment._id },
@@ -325,7 +259,7 @@ export const refundPayment = asyncHandler(async (req, res) => {
         );
 
         emitToUser(user._id.toString(), 'wallet_update', {
-            newBalance: user.accountBalance,
+            ...newBalanceFields(user),
             transaction
         });
 
@@ -335,10 +269,12 @@ export const refundPayment = asyncHandler(async (req, res) => {
             metadata: { amount: payment.amount, refundId: refund.id }
         });
 
+        sendEmailAlert(user, 'refundProcessed', { amount: payment.amount }).catch(() => {});
+
         res.status(200).json({
             success: true,
             message: 'Refund initiated successfully',
-            newBalance: user.accountBalance
+            ...newBalanceFields(user)
         });
     } catch (err) {
         // Release the claim so the user can retry a refund that never happened.

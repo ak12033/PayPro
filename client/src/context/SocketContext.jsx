@@ -16,6 +16,7 @@ import { getAccessToken } from '../services/auth/tokenStore';
 import { refreshSession } from '../services/auth/refreshSession';
 import { RECENT_FETCH_LIMIT } from '../constants/transactions';
 import { CURRENCY_LOCALE, CURRENCY_SYMBOL } from '../constants/app';
+import { amountMinorOf, balanceMinorOf, fromMinor, newBalanceMinorOf } from '../lib/money';
 
 const SocketContext = createContext(null);
 
@@ -32,7 +33,7 @@ const formatAmount = (value) =>
 const MAX_AUTH_RECOVERIES = 3;
 
 export const SocketProvider = ({ children }) => {
-    const { token, setRecentTransactions, setBalance, setUser, fetchDashboardData, logout } =
+    const { token, setRecentTransactions, setBalanceMinor, setUser, fetchDashboardData, logout } =
         useAuth();
 
     const { refreshNotifications, showNotificationToast } = useNotifications();
@@ -46,7 +47,7 @@ export const SocketProvider = ({ children }) => {
      */
     const handlersRef = useRef({});
     handlersRef.current = {
-        setBalance,
+        setBalanceMinor,
         setRecentTransactions,
         setUser,
         fetchDashboardData,
@@ -210,12 +211,20 @@ export const SocketProvider = ({ children }) => {
 
         // ---- money movement -------------------------------------------------
 
+        // Balances arrive as `newBalanceMinor` (integer paise); `newBalance` in
+        // rupees is the fallback for a server that predates it.
+        const applyBalance = (data) => {
+            const minor = newBalanceMinorOf(data);
+            if (minor !== null) handlersRef.current.setBalanceMinor(minor);
+        };
+
         connection.on('wallet_update', (data) => {
-            if (data.newBalance !== undefined) handlersRef.current.setBalance(data.newBalance);
+            applyBalance(data);
             prependTransaction(data.transaction);
             publish('wallet_update', data);
 
-            const { category, amount, type } = data.transaction ?? {};
+            const { category, type } = data.transaction ?? {};
+            const amount = fromMinor(amountMinorOf(data.transaction));
 
             if (category === 'Transfer') {
                 toast.success(
@@ -231,12 +240,12 @@ export const SocketProvider = ({ children }) => {
         });
 
         connection.on('deposit_success', (data) => {
-            if (data.newBalance !== undefined) handlersRef.current.setBalance(data.newBalance);
+            applyBalance(data);
             prependTransaction(data.transaction);
             publish('wallet_update', data);
 
             if (data.transaction) {
-                toast.success(`${formatAmount(data.transaction.amount)} added to your wallet`);
+                toast.success(`${formatAmount(fromMinor(amountMinorOf(data.transaction)))} added to your wallet`);
             }
         });
 
@@ -244,6 +253,9 @@ export const SocketProvider = ({ children }) => {
 
         connection.on('notification_received', (data) => {
             handlersRef.current.refreshNotifications();
+            // Pages that react to a decision (identity verification, Phase 5)
+            // listen for it rather than polling.
+            publish('notification_received', data);
 
             if (data.notification) {
                 // Shared with the FCM foreground handler, which deduplicates on
@@ -268,10 +280,21 @@ export const SocketProvider = ({ children }) => {
             // screen's toggles read from.
             handlersRef.current.setUser((current) => ({ ...current, ...data.user }));
 
-            if (data.user.accountBalance !== undefined) {
-                handlersRef.current.setBalance(data.user.accountBalance);
+            if (data.user.balanceMinor !== undefined || data.user.accountBalance !== undefined) {
+                handlersRef.current.setBalanceMinor(balanceMinorOf(data.user));
             }
         });
+
+        // ---- budgets & goals -------------------------------------------------
+
+        /**
+         * No AuthContext state to update here — budgets and goals are
+         * page-scoped data owned by `useBudget`/`useGoals`' own `useQuery`
+         * calls, not global state like balance. These events exist purely so
+         * a page already on screen can refetch without polling.
+         */
+        connection.on('budget_update', (data) => publish('budget_update', data));
+        connection.on('goal_update', (data) => publish('goal_update', data));
 
         connection.on('session_compromised', (data) => {
             toast.error(data.reason || 'Your session was ended for security reasons.', {

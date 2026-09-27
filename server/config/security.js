@@ -174,6 +174,120 @@ export const securityConfig = {
         },
     },
 
+    /**
+     * Transaction risk (plan.md §30.2), kept beside the login weights on
+     * purpose: both are the same kind of knob and an operator tuning one will
+     * want to see the other.
+     *
+     * The structure mirrors `risk` above — deterministic rule weights, a score,
+     * and bands that decide what happens — with one difference that matters:
+     * the language-model score is *one weighted input*, not the verdict. Before
+     * this, `checkFraud`'s Gemini output was stored on the transaction and acted
+     * on by nobody; making a model the primary fraud control would have been the
+     * wrong fix for that.
+     */
+    transactionRisk: {
+        /**
+         * Action bands (§30.2.2). A score at or above each threshold takes that
+         * action; below `stepUp` the transfer proceeds untouched.
+         */
+        bands: {
+            stepUp: num('TXN_RISK_STEP_UP', 40),
+            hold: num('TXN_RISK_HOLD', 70),
+            block: num('TXN_RISK_BLOCK', 85),
+        },
+
+        weights: {
+            newRecipientHighValue: num('TXN_RISK_W_NEW_RECIPIENT', 25),
+            velocity: num('TXN_RISK_W_VELOCITY', 20),
+            amountAnomaly: num('TXN_RISK_W_AMOUNT_ANOMALY', 25),
+            balanceDrain: num('TXN_RISK_W_BALANCE_DRAIN', 20),
+            dormantReactivation: num('TXN_RISK_W_DORMANT', 20),
+            newDeviceMoneyMovement: num('TXN_RISK_W_NEW_DEVICE_MOVEMENT', 30),
+            oddHour: num('TXN_RISK_W_ODD_HOUR', 10),
+            rapidTopupThenSend: num('TXN_RISK_W_RAPID_TOPUP_SEND', 30),
+            /**
+             * The model's contribution, scaled by its own 0-100 score. At 30, a
+             * Gemini score of 100 adds 30 points — enough to push a
+             * borderline-suspicious transfer over the step-up line, never enough
+             * to block one on its own. That asymmetry is the point: an outage or
+             * a hallucination degrades the control instead of breaking it.
+             */
+            model: num('TXN_RISK_W_MODEL', 30),
+        },
+
+        thresholds: {
+            /** NEW_RECIPIENT_HIGH_VALUE: amount vs the user's median debit. */
+            newRecipientMultiple: num('TXN_RISK_NEW_RECIPIENT_MULTIPLE', 3),
+            /** VELOCITY: more than N transfers in M minutes. */
+            velocityCount: num('TXN_RISK_VELOCITY_COUNT', 3),
+            velocityWindowMinutes: num('TXN_RISK_VELOCITY_WINDOW_MIN', 10),
+            /** AMOUNT_ANOMALY: amount vs the 90-day median debit. */
+            anomalyMultiple: num('TXN_RISK_ANOMALY_MULTIPLE', 5),
+            /** BALANCE_DRAIN: fraction of the current balance being moved. */
+            drainFraction: num('TXN_RISK_DRAIN_FRACTION', 0.8),
+            /** DORMANT_REACTIVATION: silence, then a high-value transfer. */
+            dormantDays: num('TXN_RISK_DORMANT_DAYS', 60),
+            /** NEW_DEVICE_MONEY_MOVEMENT: minutes between first sign-in and the transfer. */
+            newDeviceMinutes: num('TXN_RISK_NEW_DEVICE_MINUTES', 10),
+            /** ODD_HOUR: IST hours, [start, end). */
+            oddHourStart: num('TXN_RISK_ODD_HOUR_START', 0),
+            oddHourEnd: num('TXN_RISK_ODD_HOUR_END', 5),
+            /** RAPID_TOPUP_THEN_SEND: fraction of a just-captured top-up. */
+            rapidTopupFraction: num('TXN_RISK_RAPID_TOPUP_FRACTION', 0.9),
+            rapidTopupMinutes: num('TXN_RISK_RAPID_TOPUP_MINUTES', 10),
+            /**
+             * Below this, "median debit" is computed from too few rows to mean
+             * anything, and every early transfer would look anomalous. The
+             * multiple-of-median rules simply do not fire until there is history.
+             */
+            minHistoryForMedian: num('TXN_RISK_MIN_HISTORY', 5),
+        },
+
+        /**
+         * How long an unreviewed hold sits before it releases itself (§30.2.3).
+         * An unstaffed queue must not strand a user's money silently, so the
+         * default is a day and the release is audited.
+         */
+        autoReleaseHours: num('TXN_RISK_AUTO_RELEASE_HOURS', 24),
+    },
+
+    /**
+     * AML transaction monitoring (plan.md §30.3, §0.20.3), in **shadow mode**:
+     * every rule flags and logs to the AmlAlert queue and none of them blocks
+     * anything. The numbers are placeholders. Which obligations, thresholds and
+     * lists actually apply is a legal determination (§41.3) that has not been
+     * made, and these must be replaced by it — they are tuned only to be
+     * plausible for a consumer wallet, not to satisfy any rule.
+     *
+     * Amounts are in paise.
+     */
+    aml: {
+        /** The trailing window every rule except rapid in-out looks at. */
+        windowHours: num('AML_WINDOW_HOURS', 24),
+        structuring: {
+            /** A reporting threshold people might try to stay under (₹50,000). */
+            thresholdMinor: num('AML_STRUCTURING_THRESHOLD_MINOR', 5_000_000),
+            /** "Just under": at or above this fraction of the threshold, but below it. */
+            bandFraction: num('AML_STRUCTURING_BAND', 0.9),
+            minCount: num('AML_STRUCTURING_MIN_COUNT', 3),
+        },
+        rapidInOut: {
+            windowMinutes: num('AML_RAPID_WINDOW_MIN', 60),
+            /** Ignore small amounts moving through (₹10,000). */
+            minInflowMinor: num('AML_RAPID_MIN_INFLOW_MINOR', 1_000_000),
+            /** Fraction of what came in that went out again within the window. */
+            outflowFraction: num('AML_RAPID_OUTFLOW_FRACTION', 0.8),
+        },
+        fanIn: { minCounterparties: num('AML_FAN_IN_MIN', 10) },
+        fanOut: { minCounterparties: num('AML_FAN_OUT_MIN', 10) },
+        velocity: {
+            maxCount: num('AML_VELOCITY_MAX_COUNT', 25),
+            /** ₹2,00,000 out in the window. */
+            maxVolumeMinor: num('AML_VELOCITY_MAX_VOLUME_MINOR', 20_000_000),
+        },
+    },
+
     network: {
         /**
          * Substrings that mark an ISP as a hosting provider, VPN exit or proxy.

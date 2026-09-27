@@ -24,6 +24,12 @@ export const userApi = {
      */
     search: ({ search, page = 1, limit = 25 } = {}) =>
         api.get('/users/all', { params: { ...(search && { search }), page, limit } }),
+
+    /** Account closure (plan.md §40.2) — re-authentication required, same pattern as `updateProfile`. */
+    closeAccount: (payload) => api.post('/users/me/close', payload),
+
+    /** A JSON bundle of the caller's own data. */
+    exportData: () => api.post('/users/me/export', undefined, { responseType: 'blob' }),
 };
 
 export default userApi;

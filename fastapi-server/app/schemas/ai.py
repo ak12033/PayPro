@@ -13,6 +13,19 @@ class CategorizeRequest(BaseModel):
     # token — through this endpoint.
     description: str = Field(min_length=1, max_length=500)
     amount: float = Field(ge=0)
+    # The canonical category list, from server/constants/categories.js. Optional
+    # so an older Node deployment (or a direct test call) still gets a sane
+    # default rather than a validation error; when present it keeps this
+    # service's prompt and the ledger's category registry from drifting apart,
+    # which previously happened silently (19 categories here vs 12 there).
+    allowed_categories: list[str] | None = Field(default=None, max_length=100)
+
+    @field_validator("allowed_categories", mode="before")
+    @classmethod
+    def clean_categories(cls, value):
+        if not value:
+            return None
+        return [str(v)[:60] for v in value][:100]
 
 
 class CategorizeResponse(BaseModel):

@@ -1,15 +1,19 @@
-import React from 'react';
-import { CircleHelp, Copy } from 'lucide-react';
+import React, { useState } from 'react';
+import { CircleHelp, Copy, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Sheet from '../../components/ui/Sheet';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import { LedgerAmount } from '../../components/ui/Amount';
 import { DetailRow } from '../../components/ui/List';
+import { Select } from '../../components/ui/Field';
 import { getTransactionIcon } from './transactionIcons';
+import { statusMeta } from './transactionStatus';
 import { LEDGER_TYPES } from '../../constants/transactions';
 import { formatDateTime } from '../../utils/formatters';
+import { getErrorMessage } from '../../utils/errors';
 import cn from '../../lib/cn';
+import { amountMinorOf } from '../../lib/money';
 
 /**
  * The receipt.
@@ -23,11 +27,44 @@ import cn from '../../lib/cn';
  * be able to answer, and a row in a list is not an answer. Everything the
  * server already returns about the transaction is surfaced here.
  */
-const TransactionDetailSheet = ({ transaction, open, onClose, onExplain }) => {
+
+/**
+ * Categories the ledger writes itself, describing *how* money moved rather
+ * than what it was for. Mirrors `SYSTEM_CATEGORIES` in
+ * `server/constants/categories.js` — kept in sync manually since this is a
+ * display-only gate; the server is the actual authority and refuses the
+ * PATCH either way.
+ */
+const SYSTEM_CATEGORIES = ['Transfer', 'Top Up', 'Refund', 'Stripe', 'Adjustment', 'Withdrawal'];
+
+const TransactionDetailSheet = ({ transaction, open, onClose, onExplain, categories = [], onRecategorise }) => {
+    const [editingCategory, setEditingCategory] = useState(false);
+    const [saving, setSaving] = useState(false);
+
     if (!transaction) return null;
 
     const isDebit = transaction.type === LEDGER_TYPES.DEBIT;
     const Icon = getTransactionIcon(transaction.icon);
+    const status = statusMeta(transaction.status);
+    const canRecategorise = onRecategorise && !SYSTEM_CATEGORIES.includes(transaction.category);
+
+    const saveCategory = async (event) => {
+        const next = event.target.value;
+        if (!next || next === transaction.category) {
+            setEditingCategory(false);
+            return;
+        }
+
+        setSaving(true);
+        try {
+            await onRecategorise(transaction, next);
+            setEditingCategory(false);
+        } catch (caught) {
+            toast.error(getErrorMessage(caught, 'Could not update the category.'));
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const copyReference = async () => {
         try {
@@ -61,17 +98,18 @@ const TransactionDetailSheet = ({ transaction, open, onClose, onExplain }) => {
                     Transaction detail: {transaction.description}
                 </h2>
                 <div className="mt-3">
-                    <LedgerAmount type={transaction.type} value={transaction.amount} size="display" />
+                    <LedgerAmount type={transaction.type} minor={amountMinorOf(transaction)} size="display" />
                 </div>
 
                 <p className="mt-1.5 text-sm text-text-secondary">
                     {transaction.description || 'Transaction'}
                 </p>
 
-                <div className="mt-3 flex justify-center">
+                <div className="mt-3 flex justify-center gap-2">
                     <Badge tone={isDebit ? 'neutral' : 'positive'} dot>
                         {isDebit ? 'Sent' : 'Received'}
                     </Badge>
+                    {status && <Badge tone={status.tone}>{status.label}</Badge>}
                 </div>
             </div>
 
@@ -79,7 +117,42 @@ const TransactionDetailSheet = ({ transaction, open, onClose, onExplain }) => {
                 <DetailRow label="Date" value={formatDateTime(transaction.createdAt)} />
 
                 {transaction.category && (
-                    <DetailRow label="Category" value={transaction.category} />
+                    <DetailRow
+                        label="Category"
+                        value={
+                            editingCategory ? (
+                                <Select
+                                    autoFocus
+                                    defaultValue={transaction.category}
+                                    disabled={saving}
+                                    onBlur={() => setEditingCategory(false)}
+                                    onChange={saveCategory}
+                                    className="h-8 text-xs"
+                                >
+                                    {!categories.some((c) => c.name === transaction.category) && (
+                                        <option value={transaction.category}>{transaction.category}</option>
+                                    )}
+                                    {categories.map((c) => (
+                                        <option key={c.name} value={c.name}>{c.name}</option>
+                                    ))}
+                                </Select>
+                            ) : (
+                                <span className="flex items-center justify-end gap-1.5">
+                                    {transaction.category}
+                                    {canRecategorise && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditingCategory(true)}
+                                            aria-label="Change category"
+                                            className="rounded p-1 text-text-muted hover:bg-surface-hover hover:text-text"
+                                        >
+                                            <Pencil size={12} />
+                                        </button>
+                                    )}
+                                </span>
+                            )
+                        }
+                    />
                 )}
 
                 {transaction.invoiceId && (
@@ -102,10 +175,6 @@ const TransactionDetailSheet = ({ transaction, open, onClose, onExplain }) => {
                             </span>
                         }
                     />
-                )}
-
-                {transaction.status && (
-                    <DetailRow label="Status" value={transaction.status} />
                 )}
             </dl>
 

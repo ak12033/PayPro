@@ -17,15 +17,32 @@ import transactionRouter from './routes/transactionRoutes.js';
 import notificationRouter from './routes/notificationRoutes.js';
 import securityRouter from './routes/securityRoutes.js';
 import analyticsRouter from './routes/analyticsRoutes.js';
+import adminRouter from './routes/adminRoutes.js';
+import budgetRouter from './routes/budgetRoutes.js';
+import goalRouter from './routes/goalRoutes.js';
+import insightsRouter from './routes/insightsRoutes.js';
+import recurringRouter from './routes/recurringRoutes.js';
+import billRouter from './routes/billRoutes.js';
+import supportRouter from './routes/supportRoutes.js';
+import payeeRouter from './routes/payeeRoutes.js';
+import kycRouter from './routes/kycRoutes.js';
+import withdrawalRouter from './routes/withdrawalRoutes.js';
+import billPaymentRouter from './routes/billPaymentRoutes.js';
+import portfolioRouter from './routes/portfolioRoutes.js';
 import { startCronJobs, stopCronJobs } from './utils/cron.js';
 import { initSocket } from './utils/socket.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
 import { globalLimiter } from './middlewares/rateLimiters.js';
 import { requestContext } from './middlewares/requestContext.js';
 import logger from './utils/logger.js';
+import { checkMinorReadiness } from './services/minorBackfillService.js';
+import { initErrorTracking, flushErrorTracking } from './utils/errorTracking.js';
 
 // Refuse to boot with a broken configuration rather than failing later per request.
 validateConfig();
+
+// Before anything else can fail: a no-op unless SENTRY_DSN is set (plan.md §39.2).
+if (await initErrorTracking()) logger.info('Error tracking enabled');
 
 const app = express();
 
@@ -156,6 +173,19 @@ app.use('/api/payments', paymentRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/security', securityRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/budgets', budgetRouter);
+app.use('/api/goals', goalRouter);
+app.use('/api/insights', insightsRouter);
+app.use('/api/recurring', recurringRouter);
+app.use('/api/bills', billRouter);
+app.use('/api/support', supportRouter);
+app.use('/api/payees', payeeRouter);
+// Phase 5 (plan.md §0.20).
+app.use('/api/kyc', kycRouter);
+app.use('/api/withdrawals', withdrawalRouter);
+app.use('/api/bill-payments', billPaymentRouter);
+app.use('/api/portfolio', portfolioRouter);
 
 // Must come after all routes.
 app.use(notFoundHandler);
@@ -168,6 +198,21 @@ const PORT = config.PORT || 5000;
 server.listen(PORT, () => {
     logger.info('Server started', { port: PORT, env: config.NODE_ENV });
     startCronJobs();
+
+    /**
+     * Balances are read from `balanceMinor` (plan.md §7.4 step 3). On a
+     * database the paise backfill has not reached, some users' stored value is
+     * wrong and their payments would be refused — so say so at boot, at error
+     * level, rather than leave it to be discovered from support tickets.
+     * Fire-and-forget: a slow count must not delay serving traffic.
+     */
+    checkMinorReadiness()
+        .then((result) => {
+            if (!result.ready) {
+                logger.error('Paise backfill incomplete: run `npm run backfill:minor -- --apply`', result);
+            }
+        })
+        .catch((err) => logger.warn('Paise readiness check failed', { error: err.message }));
 });
 
 /**
@@ -195,16 +240,19 @@ const shutdown = async (signal) => {
         try {
             await mongoose.connection.close(false);
             logger.info('Connections closed, exiting');
+            await flushErrorTracking();
             process.exit(0);
         } catch (err) {
-            logger.error('Error during shutdown', { error: err.message });
+            logger.error('Error during shutdown', { err });
+            await flushErrorTracking();
             process.exit(1);
         }
     });
 
     // Don't hang forever on a stuck connection.
-    setTimeout(() => {
+    setTimeout(async () => {
         logger.error('Forced shutdown after timeout');
+        await flushErrorTracking(1000);
         process.exit(1);
     }, 15000).unref();
 };
@@ -218,13 +266,10 @@ process.on('SIGINT', () => shutdown('SIGINT'));
  * the errorHandler catches the in-request cases.
  */
 process.on('unhandledRejection', (reason) => {
-    logger.error('Unhandled promise rejection', {
-        error: reason instanceof Error ? reason.message : String(reason),
-        stack: reason instanceof Error ? reason.stack : undefined,
-    });
+    logger.error('Unhandled promise rejection', { err: reason });
 });
 
 process.on('uncaughtException', (err) => {
-    logger.error('Uncaught exception', { error: err.message, stack: err.stack });
+    logger.error('Uncaught exception', { err });
     shutdown('uncaughtException');
 });

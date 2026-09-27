@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
-import AuthLayout from './AuthLayout';
+import AuthSplitLayout from './AuthSplitLayout';
 import Button from '../../components/ui/Button';
 import { Field, Input } from '../../components/ui/Field';
 import PasswordField from '../../components/forms/PasswordField';
@@ -9,6 +9,20 @@ import { useAuth } from '../../context/AuthContext';
 import { authApi } from '../../services/api/endpoints/authApi';
 import { getErrorMessage } from '../../utils/errors';
 import { ROUTES, HOME_ROUTE } from '../../constants/routes';
+
+/** Left-panel tiles: what actually protects a session in this product. */
+const HIGHLIGHTS = [
+    ['Sessions', 'Rotating', 'Token refresh'],
+    ['2-step', 'Email/TOTP', 'Verification'],
+    ['Risk checks', 'Real-time', 'Device + location'],
+];
+
+const STATUS_CARD = {
+    label: 'Threat monitoring',
+    status: 'Active',
+    title: '24/7 protection',
+    body: 'New device and location checks trigger OTP verification.',
+};
 
 /**
  * Sign in.
@@ -71,6 +85,8 @@ const Login = () => {
                         challengeId: caught.response.data.challengeId,
                         reason: caught.response.data.reason,
                         message: caught.response.data.message,
+                        // 'totp': the code is on their phone, not in their inbox.
+                        method: caught.response.data.method ?? 'email',
                     },
                 });
                 return;
@@ -93,17 +109,15 @@ const Login = () => {
     };
 
     return (
-        <AuthLayout
-            title="Sign in"
-            subtitle="Welcome back to PayPro."
-            footer={
-                <span className="text-text-muted">
-                    New here?{' '}
-                    <Link to={ROUTES.SIGNUP} className="font-medium text-accent-text">
-                        Create an account
-                    </Link>
-                </span>
-            }
+        <AuthSplitLayout
+            badge="Secure workspace access"
+            eyebrow="Welcome back"
+            headline="Sign in to your control center."
+            description="Review activity, manage sessions and access your dashboard with a secure verified login flow."
+            statusCard={STATUS_CARD}
+            highlights={HIGHLIGHTS}
+            title="Login"
+            subtitle="Use your email and password to continue securely."
         >
             <form onSubmit={submit} className="space-y-4" noValidate>
                 {error && (
@@ -116,7 +130,7 @@ const Login = () => {
                     </div>
                 )}
 
-                <Field label="Email">
+                <Field label="Email address">
                     {(props) => (
                         <Input
                             type="email"
@@ -134,22 +148,46 @@ const Login = () => {
                     )}
                 </Field>
 
-                <Field label="Password">
-                    {(props) => (
-                        <PasswordField
-                            value={password}
-                            onChange={(event) => setPassword(event.target.value)}
-                            autoComplete="current-password"
-                            {...props}
-                        />
-                    )}
-                </Field>
+                <div>
+                    <Field label="Password">
+                        {(props) => (
+                            <PasswordField
+                                value={password}
+                                onChange={(event) => setPassword(event.target.value)}
+                                autoComplete="current-password"
+                                placeholder="Enter your password"
+                                {...props}
+                            />
+                        )}
+                    </Field>
+                    <div className="mt-2 flex justify-end">
+                        <Link
+                            to={ROUTES.FORGOT_PASSWORD}
+                            className="text-xs font-medium text-accent-text"
+                        >
+                            Forgot password?
+                        </Link>
+                    </div>
+                </div>
 
                 <Button type="submit" variant="primary" size="lg" fullWidth loading={loading}>
-                    Sign in
+                    Login to dashboard
                 </Button>
+
+                <div className="flex items-center gap-3 text-xs text-text-muted">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-center">Protected by device and location verification</span>
+                    <div className="h-px flex-1 bg-border" />
+                </div>
+
+                <p className="text-center text-sm text-text-muted">
+                    Don&apos;t have an account?{' '}
+                    <Link to={ROUTES.SIGNUP} className="font-semibold text-accent-text">
+                        Sign up
+                    </Link>
+                </p>
             </form>
-        </AuthLayout>
+        </AuthSplitLayout>
     );
 };
 

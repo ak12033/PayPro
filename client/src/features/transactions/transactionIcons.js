@@ -12,13 +12,17 @@
 import {
     CircleDollarSign, ShoppingBag, ShoppingCart, Utensils, Plane, Home, Receipt,
     Wifi, HeartPulse, User, PiggyBank, Briefcase, GraduationCap, Shield, Tv,
-    Send, Download, Wallet, RefreshCcw, Gift, BookOpen, Car, Zap,
+    Send, Download, Wallet, RefreshCcw, Gift, BookOpen, Car, Zap, Scale, Landmark,
 } from 'lucide-react';
 
 const ICONS = {
     CircleDollarSign, ShoppingBag, ShoppingCart, Utensils, Plane, Home, Receipt,
     Wifi, HeartPulse, User, PiggyBank, Briefcase, GraduationCap, Shield, Tv,
     Send, Download, Wallet, RefreshCcw, Gift, BookOpen, Car, Zap,
+    /** Balance adjustments and reconciliation corrections (plan.md §28.2). */
+    Scale,
+    /** Withdrawals to the holder's bank account (Phase 5). */
+    Landmark,
 };
 
 /** Falls back to a generic money icon for anything unrecognised. */

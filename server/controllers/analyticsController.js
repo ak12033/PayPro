@@ -2,8 +2,24 @@ import mongoose from 'mongoose';
 import Transaction from '../models/Transaction.js';
 import Payment from '../models/Payment.js';
 import User from '../models/User.js';
-import { asEnum } from '../utils/sanitize.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { asInt } from '../utils/sanitize.js';
+import { getCashflow as computeCashflow } from '../services/cashflowService.js';
+import { getFinancialHealth } from '../services/financialHealthService.js';
+import { AMOUNT_MINOR_EXPR, fromPaise } from '../utils/money.js';
+import {
+    APP_TIMEZONE,
+    resolveRange,
+    truncateDate,
+    generateBuckets,
+    round2,
+    getMerchantBreakdown as queryMerchantBreakdown,
+    getTopExpenses as queryTopExpenses,
+    getSpendingRhythm as querySpendingRhythm,
+} from '../services/analyticsQueryService.js';
+
+/** Only rows that really happened (or are on their way to) belong on a dashboard. */
+const REPORTABLE_STATUSES = ['SUCCESS', 'PARTIALLY_REFUNDED', 'REFUNDED'];
 
 /**
  * Dashboard analytics.
@@ -13,90 +29,19 @@ import { asyncHandler } from '../utils/asyncHandler.js';
  * Debit rows are money out, and a Payment's `status` is what drives the
  * success-rate and pending/failed KPIs. Every query below is scoped to
  * `req.user.id`, the same way every other read in this codebase is.
+ *
+ * `resolveRange`/`truncateDate`/`generateBuckets`/`round2` moved to
+ * `services/analyticsQueryService.js` (plan.md §17.2) so budgets, cash flow,
+ * merchants, top-expenses and deterministic insights bucket time identically
+ * instead of each re-deriving "what is a week" — behaviour here is unchanged.
  */
-
-const RANGE_CONFIG = {
-    '1D': { days: 1, unit: 'hour' },
-    '7D': { days: 7, unit: 'day' },
-    '1M': { days: 30, unit: 'day' },
-    '3M': { days: 90, unit: 'week' },
-    '6M': { days: 180, unit: 'week' },
-    '1Y': { days: 365, unit: 'month' },
-};
-const RANGE_KEYS = Object.keys(RANGE_CONFIG);
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * Current period + the immediately preceding period of equal length, so
- * "growth vs previous period" always compares like-for-like.
- */
-const resolveRange = (rangeParam) => {
-    const range = asEnum(rangeParam, RANGE_KEYS, '1M');
-    const { days, unit } = RANGE_CONFIG[range];
-    const now = new Date();
-    const currentStart = new Date(now.getTime() - days * DAY_MS);
-    const previousStart = new Date(currentStart.getTime() - days * DAY_MS);
-    return { range, unit, now, currentStart, previousStart };
-};
-
-/**
- * JS mirror of Mongo's `$dateTrunc` (UTC, binSize 1, default Sunday week
- * start) so bucket keys computed here always match bucket keys computed in
- * an aggregation pipeline.
- */
-const truncateDate = (value, unit) => {
-    const d = new Date(value);
-    switch (unit) {
-        case 'hour':
-            d.setUTCMinutes(0, 0, 0);
-            return d;
-        case 'week': {
-            d.setUTCHours(0, 0, 0, 0);
-            d.setUTCDate(d.getUTCDate() - d.getUTCDay());
-            return d;
-        }
-        case 'month':
-            d.setUTCHours(0, 0, 0, 0);
-            d.setUTCDate(1);
-            return d;
-        case 'day':
-        default:
-            d.setUTCHours(0, 0, 0, 0);
-            return d;
-    }
-};
-
-const stepDate = (value, unit) => {
-    const d = new Date(value);
-    switch (unit) {
-        case 'hour': d.setUTCHours(d.getUTCHours() + 1); return d;
-        case 'week': d.setUTCDate(d.getUTCDate() + 7); return d;
-        case 'month': d.setUTCMonth(d.getUTCMonth() + 1); return d;
-        case 'day':
-        default: d.setUTCDate(d.getUTCDate() + 1); return d;
-    }
-};
-
-/** Every bucket boundary between `start` and `end`, inclusive — fills gaps so a quiet day still renders as a zero point instead of a hole in the line. */
-const generateBuckets = (start, end, unit) => {
-    const buckets = [];
-    let cursor = truncateDate(start, unit);
-    const last = truncateDate(end, unit);
-    while (cursor <= last) {
-        buckets.push(new Date(cursor));
-        cursor = stepDate(cursor, unit);
-    }
-    return buckets;
-};
-
-const round2 = (value) => Number((value || 0).toFixed(2));
 
 export const getOverview = asyncHandler(async (req, res) => {
     const userId = new mongoose.Types.ObjectId(req.user.id);
     const { unit, now, currentStart, previousStart } = resolveRange(req.query.range);
 
     const [result] = await Transaction.aggregate([
-        { $match: { userId, createdAt: { $gte: previousStart, $lte: now } } },
+        { $match: { userId, status: { $in: REPORTABLE_STATUSES }, createdAt: { $gte: previousStart, $lte: now } } },
         {
             $facet: {
                 currentSeries: [
@@ -104,20 +49,20 @@ export const getOverview = asyncHandler(async (req, res) => {
                     {
                         $group: {
                             _id: {
-                                date: { $dateTrunc: { date: '$createdAt', unit, timezone: 'UTC' } },
+                                date: { $dateTrunc: { date: '$createdAt', unit, timezone: APP_TIMEZONE } },
                                 type: '$type',
                             },
-                            total: { $sum: '$amount' },
+                            total: { $sum: AMOUNT_MINOR_EXPR },
                         },
                     },
                 ],
                 currentTotals: [
                     { $match: { createdAt: { $gte: currentStart } } },
-                    { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+                    { $group: { _id: '$type', total: { $sum: AMOUNT_MINOR_EXPR }, count: { $sum: 1 } } },
                 ],
                 previousTotals: [
                     { $match: { createdAt: { $lt: currentStart } } },
-                    { $group: { _id: '$type', total: { $sum: '$amount' } } },
+                    { $group: { _id: '$type', total: { $sum: AMOUNT_MINOR_EXPR } } },
                 ],
             },
         },
@@ -153,9 +98,9 @@ export const getOverview = asyncHandler(async (req, res) => {
         const entry = seriesMap.get(key) || { moneyIn: 0, moneyOut: 0 };
         return {
             date: key,
-            moneyIn: round2(entry.moneyIn),
-            moneyOut: round2(entry.moneyOut),
-            net: round2(entry.moneyIn - entry.moneyOut),
+            moneyIn: fromPaise(entry.moneyIn),
+            moneyOut: fromPaise(entry.moneyOut),
+            net: fromPaise(entry.moneyIn - entry.moneyOut),
         };
     });
 
@@ -166,9 +111,9 @@ export const getOverview = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         summary: {
-            moneyIn: round2(moneyIn),
-            moneyOut: round2(moneyOut),
-            netCashFlow: round2(netCashFlow),
+            moneyIn: fromPaise(moneyIn),
+            moneyOut: fromPaise(moneyOut),
+            netCashFlow: fromPaise(netCashFlow),
             transactionCount,
             growthPct,
             pendingPayments,
@@ -184,17 +129,17 @@ export const getCategoryBreakdown = asyncHandler(async (req, res) => {
     const { now, currentStart, previousStart } = resolveRange(req.query.range);
 
     const [result] = await Transaction.aggregate([
-        { $match: { userId, type: 'Debit', createdAt: { $gte: previousStart, $lte: now } } },
+        { $match: { userId, type: 'Debit', status: 'SUCCESS', createdAt: { $gte: previousStart, $lte: now } } },
         {
             $facet: {
                 current: [
                     { $match: { createdAt: { $gte: currentStart } } },
-                    { $group: { _id: '$category', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+                    { $group: { _id: '$category', amount: { $sum: AMOUNT_MINOR_EXPR }, count: { $sum: 1 } } },
                     { $sort: { amount: -1 } },
                 ],
                 previous: [
                     { $match: { createdAt: { $lt: currentStart } } },
-                    { $group: { _id: '$category', amount: { $sum: '$amount' } } },
+                    { $group: { _id: '$category', amount: { $sum: AMOUNT_MINOR_EXPR } } },
                 ],
             },
         },
@@ -218,7 +163,7 @@ export const getCategoryBreakdown = asyncHandler(async (req, res) => {
 
     const items = top.map((r) => ({
         category: r._id || 'Others',
-        amount: round2(r.amount),
+        amount: fromPaise(r.amount),
         count: r.count,
         percent: totalAmount ? round2((r.amount / totalAmount) * 100) : 0,
         trendPct: trendFor(r._id, r.amount),
@@ -228,14 +173,14 @@ export const getCategoryBreakdown = asyncHandler(async (req, res) => {
     if (restAmount > 0) {
         items.push({
             category: 'Other',
-            amount: round2(restAmount),
+            amount: fromPaise(restAmount),
             count: rest.reduce((sum, r) => sum + r.count, 0),
             percent: totalAmount ? round2((restAmount / totalAmount) * 100) : 0,
             trendPct: null,
         });
     }
 
-    res.status(200).json({ items, totalAmount: round2(totalAmount) });
+    res.status(200).json({ items, totalAmount: fromPaise(totalAmount) });
 });
 
 /**
@@ -255,7 +200,7 @@ export const getNetworkGrowth = asyncHandler(async (req, res) => {
             $group: {
                 _id: '$recipientId',
                 firstDate: { $min: '$createdAt' },
-                totalSent: { $sum: '$amount' },
+                totalSent: { $sum: AMOUNT_MINOR_EXPR },
                 count: { $sum: 1 },
             },
         },
@@ -289,7 +234,7 @@ export const getNetworkGrowth = asyncHandler(async (req, res) => {
         return {
             recipientId: String(c._id),
             name: user ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Unknown',
-            totalSent: round2(c.totalSent),
+            totalSent: fromPaise(c.totalSent),
             count: c.count,
         };
     });
@@ -318,7 +263,7 @@ export const getPaymentsStatus = asyncHandler(async (req, res) => {
                     {
                         $group: {
                             _id: {
-                                date: { $dateTrunc: { date: '$createdAt', unit, timezone: 'UTC' } },
+                                date: { $dateTrunc: { date: '$createdAt', unit, timezone: APP_TIMEZONE } },
                                 status: '$status',
                             },
                             count: { $sum: 1 },
@@ -364,4 +309,41 @@ export const getPaymentsStatus = asyncHandler(async (req, res) => {
         summary: { captured, failed, pending, refunded, successRate, successRateChangePct },
         series,
     });
+});
+
+/** Cash flow — income vs expenses, distinct from "money in vs money out" above (plan.md §16). */
+export const getCashflow = asyncHandler(async (req, res) => {
+    const result = await computeCashflow(req.user.id, { range: req.query.range });
+    res.status(200).json(result);
+});
+
+/** Spend grouped by merchant/counterparty (plan.md §17.2). */
+export const getMerchantBreakdown = asyncHandler(async (req, res) => {
+    const limit = asInt(req.query.limit, { min: 1, max: 25, fallback: 10 });
+    const merchants = await queryMerchantBreakdown(req.user.id, { range: req.query.range, limit });
+    res.status(200).json({ merchants });
+});
+
+/** The largest individual debits in a range (plan.md §17.2). */
+export const getTopExpenses = asyncHandler(async (req, res) => {
+    const limit = asInt(req.query.limit, { min: 1, max: 25, fallback: 10 });
+    const transactions = await queryTopExpenses(req.user.id, { range: req.query.range, limit });
+    res.status(200).json({ transactions });
+});
+
+/** Weekday × hour spending grid (plan.md §17.2). */
+export const getSpendingRhythm = asyncHandler(async (req, res) => {
+    res.status(200).json(await querySpendingRhythm(req.user.id, { range: req.query.range }));
+});
+
+/**
+ * Financial health (plan.md §25).
+ *
+ * The response carries its own disclaimer rather than leaving the client to
+ * remember one: §25.2 requires "not a credit score" to be rendered adjacent to
+ * the score, and a string the API always returns is harder to drop than a
+ * constant someone has to remember to import.
+ */
+export const getFinancialHealthScore = asyncHandler(async (req, res) => {
+    res.status(200).json(await getFinancialHealth(req.user.id));
 });

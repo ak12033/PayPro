@@ -6,6 +6,7 @@ import Card, { CardHeader } from '../../components/ui/Card';
 import Amount from '../../components/ui/Amount';
 import EmptyState from '../../components/feedback/EmptyState';
 import ErrorState from '../../components/feedback/ErrorState';
+import ChartDataTable from '../../components/ui/ChartDataTable';
 import { formatCurrencyCompact } from '../../utils/formatters';
 import { formatAxisDate, formatTooltipDate } from './dashboardFormat';
 import {
@@ -88,40 +89,55 @@ const PerformanceHero = ({ overview, loading, error, onRetry, range }) => {
                         description="Once money moves in or out of your wallet, your performance will appear here."
                     />
                 ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                            <defs>
-                                {/* The hero chart carries the primary series colour —
-                                    the same value as the Send button. */}
-                                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={VIZ_PRIMARY} stopOpacity={AREA_FILL_OPACITY.top} />
-                                    <stop offset="100%" stopColor={VIZ_PRIMARY} stopOpacity={AREA_FILL_OPACITY.bottom} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid {...gridProps} />
-                            <XAxis
-                                dataKey="date"
-                                tickFormatter={(value) => formatAxisDate(value, range)}
-                                {...xAxisProps}
-                            />
-                            <YAxis
-                                tickFormatter={formatCurrencyCompact}
-                                {...yAxisProps}
-                                width={64}
-                            />
-                            <Tooltip cursor={lineCursor} content={<HeroTooltip range={range} />} />
-                            <Area
-                                type="monotone"
-                                dataKey="net"
-                                stroke={VIZ_PRIMARY}
-                                strokeWidth={SERIES_STROKE_WIDTH}
-                                fill={`url(#${gradientId})`}
-                                activeDot={activeDot}
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
+                    <div className="h-full w-full" aria-hidden="true">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+                                <defs>
+                                    {/* The hero chart carries the primary series colour —
+                                        the same value as the Send button. */}
+                                    <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor={VIZ_PRIMARY} stopOpacity={AREA_FILL_OPACITY.top} />
+                                        <stop offset="100%" stopColor={VIZ_PRIMARY} stopOpacity={AREA_FILL_OPACITY.bottom} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid {...gridProps} />
+                                <XAxis
+                                    dataKey="date"
+                                    tickFormatter={(value) => formatAxisDate(value, range)}
+                                    {...xAxisProps}
+                                />
+                                <YAxis
+                                    tickFormatter={formatCurrencyCompact}
+                                    {...yAxisProps}
+                                    width={64}
+                                />
+                                <Tooltip cursor={lineCursor} content={<HeroTooltip range={range} />} />
+                                <Area
+                                    type="monotone"
+                                    dataKey="net"
+                                    stroke={VIZ_PRIMARY}
+                                    strokeWidth={SERIES_STROKE_WIDTH}
+                                    fill={`url(#${gradientId})`}
+                                    activeDot={activeDot}
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
                 )}
             </div>
+
+            {!loading && hasActivity && (
+                <ChartDataTable
+                    caption={`Net cash flow by period, ${range}`}
+                    rows={series}
+                    columns={[
+                        { key: 'date', header: 'Period', render: (p) => formatTooltipDate(p.date, range) },
+                        { key: 'in', header: 'Money in', render: (p) => formatCurrencyCompact(p.moneyIn) },
+                        { key: 'out', header: 'Money out', render: (p) => formatCurrencyCompact(p.moneyOut) },
+                        { key: 'net', header: 'Net', render: (p) => formatCurrencyCompact(p.net) },
+                    ]}
+                />
+            )}
         </Card>
     );
 };

@@ -63,7 +63,23 @@ const Activity = () => {
     const [exporting, setExporting] = useState(false);
     const [accumulated, setAccumulated] = useState([]);
     const [page, setPage] = useState(1);
+    const [categories, setCategories] = useState([]);
     const { subscribe } = useSocket() ?? {};
+
+    useEffect(() => {
+        transactionApi.getCategories()
+            .then(({ data }) => setCategories(data.categories ?? []))
+            .catch(() => {}); // the picker still works with an empty list — the current value always renders
+    }, []);
+
+    const recategorise = async (transaction, category) => {
+        const { data } = await transactionApi.updateCategory(transaction._id, category);
+        setAccumulated((current) =>
+            current.map((t) => (t._id === transaction._id ? data.transaction : t))
+        );
+        setSelected(data.transaction);
+        toast.success('Category updated');
+    };
 
     const filter = params.get('filter') ?? DEFAULT_TRANSACTION_FILTER;
     const searchInput = params.get('q') ?? '';
@@ -363,6 +379,8 @@ const Activity = () => {
                 transaction={selected}
                 open={Boolean(selected)}
                 onClose={() => setSelected(null)}
+                categories={categories}
+                onRecategorise={recategorise}
             />
         </>
     );

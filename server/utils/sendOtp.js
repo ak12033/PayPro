@@ -1,37 +1,12 @@
-import nodemailer from 'nodemailer';
 import config from '../config/env.js';
+import { getTransporter } from '../services/emailService.js';
 
 /**
- * A single pooled transport for the process.
- *
- * The previous version constructed a brand new transporter — and therefore a
- * fresh TLS handshake and SMTP login — for every single OTP. Under load that is
- * both slow and a reliable way to trip Gmail's connection-rate limits.
+ * The pooled SMTP transport now lives in `services/emailService.js` (Phase 3
+ * added transactional templates that need the same pool) — this file keeps
+ * using it via `getTransporter()` so OTP mail and every other outgoing email
+ * share one connection pool instead of each opening its own.
  */
-let transporter = null;
-
-const getTransporter = () => {
-    if (transporter) return transporter;
-
-    if (!config.EMAIL_USER || !config.EMAIL_PASS) return null;
-
-    transporter = nodemailer.createTransport({
-        service: 'gmail',
-        pool: true,
-        maxConnections: 3,
-        maxMessages: 50,
-        auth: {
-            user: config.EMAIL_USER,
-            pass: config.EMAIL_PASS,
-        },
-        // Never let a hung SMTP server hold a request open indefinitely.
-        connectionTimeout: 10000,
-        greetingTimeout: 8000,
-        socketTimeout: 15000,
-    });
-
-    return transporter;
-};
 
 const COPY = {
     login: {
@@ -45,6 +20,18 @@ const COPY = {
         heading: 'Authorize Your Transfer',
         intro: 'You requested a money transfer from your PayPro wallet. To authorize it, please use the following One-Time Password (OTP):',
         warning: 'If you did not request this transfer, do NOT share this code, and change your password immediately.',
+    },
+    password_reset: {
+        subject: '🔐 Reset Your Password - OTP Code',
+        heading: 'Reset Your Password',
+        intro: 'We received a request to reset the password on your PayPro account. To continue, please use the following One-Time Password (OTP):',
+        warning: 'If you did not request a password reset, you can safely ignore this email — your password will not be changed.',
+    },
+    email_verification: {
+        subject: '✉️ Confirm Your Email - OTP Code',
+        heading: 'Confirm Your Email',
+        intro: 'Someone created a PayPro account with this email address. If it was you, confirm the address with the following One-Time Password (OTP):',
+        warning: 'If you did not create a PayPro account, ignore this email — the account cannot send or add money until this address is confirmed.',
     },
 };
 

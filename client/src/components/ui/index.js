@@ -18,6 +18,8 @@ export { default as Spinner } from './Spinner';
 export { default as Switch } from './Switch';
 export { default as SegmentedControl } from './SegmentedControl';
 export { default as Sheet, ConfirmSheet } from './Sheet';
+export { default as ProgressBar } from './ProgressBar';
+export { default as ScoreMeter, toneForScore } from './ScoreMeter';
 export { default as List, ListRow, ListGroupHeader, DetailRow } from './List';
 export { default as Field, Input, AmountInput, Select } from './Field';
 

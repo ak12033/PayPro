@@ -5,7 +5,8 @@ import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Amount from '../../components/ui/Amount';
 import IconBadge from '../../components/ui/IconBadge';
-import OtpField from '../../components/forms/OtpField';
+import SecondFactorField from '../../components/forms/SecondFactorField';
+import { isCompleteFactor } from '../../lib/secondFactor';
 import { useAuth } from '../../context/AuthContext';
 import { transactionApi } from '../../services/api/endpoints/transactionApi';
 import { getErrorMessage } from '../../utils/errors';
@@ -47,6 +48,7 @@ const TransferVerify = () => {
     const [error, setError] = useState(null);
     const [done, setDone] = useState(false);
     const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
+    const viaApp = state?.method === 'totp';
 
     // Arriving here without a pending challenge means a refresh or a direct
     // URL hit; there is nothing to verify.
@@ -61,7 +63,7 @@ const TransferVerify = () => {
     }, [cooldown]);
 
     const verify = async () => {
-        if (otp.length !== 6 || verifying) return;
+        if (!isCompleteFactor(otp) || verifying) return;
 
         setVerifying(true);
         setError(null);
@@ -145,7 +147,9 @@ const TransferVerify = () => {
                 <IconBadge icon={<ShieldCheck size={22} />} tone="accent" size="lg" className="mx-auto" />
                 <h1 className="mt-3 text-xl font-semibold text-text">Confirm this transfer</h1>
                 <p className="mt-1 text-sm text-text-muted">
-                    We sent a 6-digit code to {maskEmail(state?.email) || 'your email'}.
+                    {viaApp
+                        ? 'Enter the 6-digit code from your authenticator app.'
+                        : `We sent a 6-digit code to ${maskEmail(state?.email) || 'your email'}.`}
                 </p>
             </div>
 
@@ -162,7 +166,8 @@ const TransferVerify = () => {
             )}
 
             <div className="mt-5">
-                <OtpField
+                <SecondFactorField
+                    method={state?.method}
                     value={otp}
                     onChange={setOtp}
                     onSubmit={verify}
@@ -177,13 +182,13 @@ const TransferVerify = () => {
                 fullWidth
                 className="mt-4"
                 loading={verifying}
-                disabled={otp.length !== 6}
+                disabled={!isCompleteFactor(otp)}
                 onClick={verify}
             >
                 Confirm transfer
             </Button>
 
-            <div className="mt-4 text-center">
+            {!viaApp && <div className="mt-4 text-center">
                 <button
                     type="button"
                     onClick={resend}
@@ -192,7 +197,7 @@ const TransferVerify = () => {
                 >
                     {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Send a new code'}
                 </button>
-            </div>
+            </div>}
 
             <button
                 type="button"

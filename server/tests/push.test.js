@@ -34,7 +34,7 @@ const signup = async (email, password = 'Str0ngPass99') => {
 const auth = (t) => ({ Authorization: `Bearer ${t}` });
 
 const fund = (userId, amount) =>
-    User.updateOne({ _id: userId }, { $set: { accountBalance: amount } });
+    User.updateOne({ _id: userId }, { $set: { accountBalance: amount, balanceMinor: Math.round(amount * 100) } });
 
 const setDevices = (userId, tokens) =>
     User.updateOne({ _id: userId }, { $set: { fcmTokens: tokens } });

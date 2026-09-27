@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Plus, Send, PenLine } from 'lucide-react';
+import { ArrowRight, Plus, Send, PenLine, Landmark } from 'lucide-react';
 import PageHeader from '../../components/layout/PageHeader';
 import Card from '../../components/ui/Card';
 import Amount from '../../components/ui/Amount';
@@ -22,7 +22,7 @@ import { ROUTES } from '../../constants/routes';
  * the kind of small friction that accumulates into "this app is annoying".
  */
 const MoneyHub = () => {
-    const { balance, isCheckingAuth } = useAuth();
+    const { balanceMinor, isCheckingAuth } = useAuth();
 
     return (
         <div className="mx-auto max-w-2xl">
@@ -34,7 +34,7 @@ const MoneyHub = () => {
                     {isCheckingAuth ? (
                         <Skeleton className="h-8 w-36" />
                     ) : (
-                        <Amount value={balance} size="xl" />
+                        <Amount minor={balanceMinor} size="xl" />
                     )}
                 </div>
             </Card>
@@ -55,6 +55,23 @@ const MoneyHub = () => {
                     description="Top up your wallet with a card or UPI."
                 />
             </div>
+
+            {/* Withdrawing is the third direction, but a reviewed one — not
+                instant like the two above — so it sits below them, saying so. */}
+            <Link to={ROUTES.WITHDRAW} className="mt-3 block">
+                <Card padding="md" className="transition-colors hover:bg-surface-hover">
+                    <div className="flex items-center gap-3">
+                        <IconBadge icon={<Landmark size={17} />} tone="neutral" />
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-text">Withdraw to bank</p>
+                            <p className="text-xs text-text-muted">
+                                To your own verified account. Checked and sent by our team.
+                            </p>
+                        </div>
+                        <ArrowRight size={15} className="shrink-0 text-text-muted" aria-hidden="true" />
+                    </div>
+                </Card>
+            </Link>
 
             {/*
              * Manual entry, demoted.

@@ -35,13 +35,26 @@ export const DATE_RANGES = [
 
 export const DEFAULT_DATE_RANGE = 'All';
 
+/**
+ * Fallback only. The canonical, authoritative list is
+ * `server/constants/categories.js`, served at `GET /transactions/categories`
+ * and fetched by `RecordTransaction` and `Activity` — this exists purely so
+ * those screens have something to render before that request resolves (or if
+ * it fails).
+ */
 export const TRANSACTION_CATEGORIES = [
     'General',
     'Food',
+    'Groceries',
     'Transport',
     'Bills',
     'Shopping',
     'Health',
+    'Entertainment',
+    'Education',
+    'Rent',
+    'Travel',
+    'Others',
 ];
 
 export const TRANSACTION_TYPES = {

@@ -16,6 +16,11 @@ export const env = {
 
     razorpayKeyId: readEnv('VITE_RAZORPAY_KEY_ID'),
 
+    /** Error tracking (services/errorTracking.js). Empty = off. */
+    sentryDsn: readEnv('VITE_SENTRY_DSN'),
+    sentryEnvironment: readEnv('VITE_SENTRY_ENVIRONMENT'),
+    sentryRelease: readEnv('VITE_SENTRY_RELEASE'),
+
     firebase: {
         apiKey: readEnv('VITE_FIREBASE_API_KEY', 'mock-api-key'),
         authDomain: readEnv('VITE_FIREBASE_AUTH_DOMAIN', 'mock-auth-domain'),

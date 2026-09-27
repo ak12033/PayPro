@@ -31,6 +31,22 @@ export const transactionApi = {
      */
     getRecentRecipients: () => api.get('/transactions/recent-recipients'),
 
+    /** The canonical category list — one source of truth shared with the AI categoriser. */
+    getCategories: () => api.get('/transactions/categories'),
+
+    /** Corrects a transaction the AI (or the user, earlier) miscategorised. */
+    /**
+     * `alwaysCategorise` opts into a standing rule for this merchant
+     * (plan.md §12.4). Off by default: correcting one transaction is not the
+     * same as making a standing decision, so the UI asks first.
+     */
+    updateCategory: (id, category, { alwaysCategorise = false } = {}) =>
+        api.patch(`/transactions/${id}/category`, { category, alwaysCategorise }),
+
+    getCategoryRules: () => api.get('/transactions/category-rules'),
+
+    deleteCategoryRule: (id) => api.delete(`/transactions/category-rules/${id}`),
+
     add: (payload) => api.post('/transactions/add', payload),
 
     transfer: (payload) => api.post('/transactions/transfer', payload),
@@ -56,6 +72,13 @@ export const transactionApi = {
                 ...(search && { search }),
                 ...(startDate && { startDate }),
             },
+        }),
+
+    /** A single calendar month, in a format meant to be handed to someone else — distinct from `exportCsv` above. */
+    getStatement: ({ month, format = 'csv' } = {}) =>
+        api.get('/transactions/statement', {
+            responseType: 'blob',
+            params: { ...(month && { month }), format },
         }),
 };
 

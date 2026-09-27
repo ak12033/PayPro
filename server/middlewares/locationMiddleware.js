@@ -1,4 +1,5 @@
 import { resolveLocation } from '../services/locationService.js';
+import logger from '../utils/logger.js';
 
 const UNKNOWN = {
     ip: 'Unknown',
@@ -33,7 +34,7 @@ const locationMiddleware = async (req, res, next) => {
     try {
         req.currentLocation = (await resolveLocation(req.ip)) || UNKNOWN;
     } catch (error) {
-        console.error('Location middleware error:', error.message);
+        logger.error('Location middleware error', { error: error.message });
         req.currentLocation = UNKNOWN;
     }
     next();

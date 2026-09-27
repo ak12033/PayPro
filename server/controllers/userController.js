@@ -5,6 +5,9 @@ import { isValidEmail, validatePassword } from '../utils/validEmail.js';
 import { emitToUser } from '../utils/socket.js';
 import { asEmail, asString, asInt, escapeRegex } from '../utils/sanitize.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { closeAccount, exportUserData } from '../services/accountClosureService.js';
+import { MUTABLE_CATEGORIES } from '../services/notificationPolicy.js';
+import { balanceOf, balanceMinorOf } from '../utils/money.js';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -21,16 +24,25 @@ const BCRYPT_ROUNDS = 12;
  *
  * It is now a paginated, searchable projection of the three fields the
  * recipient picker actually needs.
+ *
+ * A search term of at least 2 characters is now required to page past the
+ * first screen (plan.md §4.9): the projection alone doesn't stop someone
+ * from harvesting every name in the system by paging an empty search with no
+ * rate limit worth mentioning. `directoryLimiter` (mounted on this route)
+ * covers volume; this covers "volume achieved one page at a time forever".
  */
 export const getAllUsers = asyncHandler(async (req, res) => {
     const limit = asInt(req.query.limit, { min: 1, max: 50, fallback: 25 });
-    const page = asInt(req.query.page, { min: 1, max: 1000, fallback: 1 });
     const search = asString(req.query.search, { maxLength: 60 });
+    const hasSearch = Boolean(search) && search.length >= 2;
+    const page = hasSearch
+        ? asInt(req.query.page, { min: 1, max: 1000, fallback: 1 })
+        : 1;
 
     // Never list the caller — you cannot transfer to yourself.
     const query = { _id: { $ne: req.user.id } };
 
-    if (search) {
+    if (hasSearch) {
         const rx = new RegExp(escapeRegex(search), 'i');
         query.$or = [{ firstName: rx }, { lastName: rx }];
     }
@@ -54,9 +66,9 @@ export const getAllUsers = asyncHandler(async (req, res) => {
 });
 
 export const getAccountBalance = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.user.id).select('accountBalance');
+    const user = await User.findById(req.user.id).select('accountBalance balanceMinor');
     if (!user) return res.status(404).json({ message: 'User not found' });
-    res.status(200).json({ balance: user.accountBalance });
+    res.status(200).json({ balance: balanceOf(user), balanceMinor: balanceMinorOf(user) });
 });
 
 export const getUserProfile = asyncHandler(async (req, res) => {
@@ -66,7 +78,16 @@ export const getUserProfile = asyncHandler(async (req, res) => {
         .lean();
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    res.status(200).json(user);
+    // The rupee figure is derived from the integer column (plan.md §7.4 step 3),
+    // not the stored double, so it can never show accumulated float error.
+    // `totp` here carries only enabled/enabledAt: the secret and the recovery
+    // codes are select:false. `totpEnabled` matches the login response's shape.
+    res.status(200).json({
+        ...user,
+        accountBalance: balanceOf(user),
+        balanceMinor: balanceMinorOf(user),
+        totpEnabled: Boolean(user.totp?.enabled),
+    });
 });
 
 export const updateUserProfile = asyncHandler(async (req, res) => {
@@ -117,6 +138,9 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
                 return res.status(409).json({ message: 'Email already in use' });
             }
             user.email = email;
+            // Proof of the old inbox says nothing about the new one.
+            user.emailVerified = false;
+            user.emailVerifiedAt = null;
         }
     }
 
@@ -151,9 +175,11 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        accountBalance: user.accountBalance,
+        accountBalance: balanceOf(user),
+        balanceMinor: balanceMinorOf(user),
         lastLoginLocation: user.lastLoginLocation,
-        preferences: user.preferences
+        preferences: user.preferences,
+        emailVerified: Boolean(user.emailVerified),
     };
 
     emitToUser(user._id.toString(), 'profile_updated', { user: payload });
@@ -174,10 +200,30 @@ export const updateSettings = asyncHandler(async (req, res) => {
     // Only booleans are accepted. A non-boolean previously passed straight into
     // the document — and `transaction2FA: "false"` is truthy, so a typo on the
     // client could silently disable a security control.
-    const keys = ['twoFactorAuth', 'transaction2FA', 'emailAlerts', 'pushNotifications'];
+    const keys = ['twoFactorAuth', 'transaction2FA', 'emailAlerts', 'pushNotifications', 'budgetAlerts'];
     for (const key of keys) {
         if (typeof req.body?.[key] === 'boolean') {
             user.preferences[key] = req.body[key];
+        }
+    }
+
+    // Same discipline for the nested preferences (plan.md §26.2.4–5): known
+    // keys only, exact types only, anything else ignored rather than stored.
+    const categories = req.body?.pushCategories;
+    if (categories && typeof categories === 'object') {
+        for (const category of MUTABLE_CATEGORIES) {
+            if (typeof categories[category] === 'boolean') {
+                user.set(`preferences.pushCategories.${category}`, categories[category]);
+            }
+        }
+    }
+    const quiet = req.body?.quietHours;
+    if (quiet && typeof quiet === 'object') {
+        if (typeof quiet.enabled === 'boolean') user.set('preferences.quietHours.enabled', quiet.enabled);
+        for (const edge of ['start', 'end']) {
+            if (Number.isInteger(quiet[edge]) && quiet[edge] >= 0 && quiet[edge] <= 23) {
+                user.set(`preferences.quietHours.${edge}`, quiet[edge]);
+            }
         }
     }
 
@@ -188,7 +234,8 @@ export const updateSettings = asyncHandler(async (req, res) => {
             firstName: user.firstName,
             lastName: user.lastName,
             email: user.email,
-            accountBalance: user.accountBalance,
+            accountBalance: balanceOf(user),
+            balanceMinor: balanceMinorOf(user),
             lastLoginLocation: user.lastLoginLocation,
             preferences: user.preferences
         }
@@ -198,4 +245,36 @@ export const updateSettings = asyncHandler(async (req, res) => {
         message: 'Settings updated successfully',
         preferences: user.preferences
     });
+});
+
+/**
+ * Account closure (plan.md §40.2). Re-authentication required, matching
+ * `updateUserProfile`'s pattern for every other irreversible-feeling account
+ * change — a stolen access token alone must not be able to close an account.
+ */
+export const closeMyAccount = asyncHandler(async (req, res) => {
+    const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : null;
+    if (!currentPassword) {
+        return res.status(400).json({ message: 'Your current password is required to close your account' });
+    }
+
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const ok = await bcrypt.compare(currentPassword, user.password);
+    if (!ok) return res.status(401).json({ message: 'Current password is incorrect' });
+
+    await closeAccount(req.user.id, { reason: asString(req.body?.reason, { maxLength: 280 }) || undefined });
+
+    res.status(200).json({ message: 'Your account has been closed.' });
+});
+
+/** A JSON export of the caller's own data (plan.md §40.2). */
+export const exportMyData = asyncHandler(async (req, res) => {
+    const bundle = await exportUserData(req.user.id);
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="paypro-data-export-${new Date().toISOString().slice(0, 10)}.json"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).json(bundle);
 });

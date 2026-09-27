@@ -20,7 +20,7 @@ import { APP_NAME } from '../../constants/app';
  * dark mode — so text here is hardcoded white/opacity rather than the
  * semantic `text-*` tokens the rest of the product uses.
  */
-const WalletCard = ({ userName, balance, className }) => {
+const WalletCard = ({ userName, balanceMinor, className }) => {
     const { ref } = usePointerTilt({ maxDeg: 5 });
 
     return (
@@ -58,7 +58,7 @@ const WalletCard = ({ userName, balance, className }) => {
 
             <div className="relative z-10">
                 <p className="text-2xs uppercase tracking-wider text-white/50">Available balance</p>
-                <Amount value={balance} size="lg" tone="neutral" className="!text-white" />
+                <Amount minor={balanceMinor} size="lg" tone="neutral" className="!text-white" />
             </div>
 
             <div className="relative z-10">

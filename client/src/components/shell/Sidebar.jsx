@@ -2,7 +2,8 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Sparkles, ShieldCheck, Plus } from 'lucide-react';
 import cn from '../../lib/cn';
-import { PRIMARY_NAV, isNavItemActive } from '../../app/navigation';
+import { PRIMARY_NAV, isNavItemActive, adminNavFor, isAdminNavItemActive } from '../../app/navigation';
+import { useAuth } from '../../context/AuthContext';
 import { ROUTES } from '../../constants/routes';
 import { APP_NAME } from '../../constants/app';
 import Button from '../ui/Button';
@@ -23,6 +24,9 @@ import Button from '../ui/Button';
 const Sidebar = () => {
     const { pathname } = useLocation();
     const navigate = useNavigate();
+    const { user } = useAuth();
+    // Empty for a customer, so the whole group simply does not render.
+    const operations = adminNavFor(user?.role);
 
     /*
      * The aside is pinned to the viewport while the page scrolls.
@@ -40,7 +44,7 @@ const Sidebar = () => {
      */
     return (
         <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 overflow-y-auto border-r border-border bg-surface/95 backdrop-blur-md lg:flex lg:flex-col">
-            <div className="flex h-16 items-center gap-2.5 px-5">
+            <div className="flex h-16 shrink-0 items-center gap-2.5 px-5">
                 <span
                     aria-hidden="true"
                     className="grid h-8 w-8 place-items-center rounded-control bg-gradient-brand text-on-accent"
@@ -53,7 +57,7 @@ const Sidebar = () => {
             {/* The primary action lives in the navigation on desktop, where
                 there is room for it, so "add money" is reachable from every
                 screen without first navigating to the wallet. */}
-            <div className="px-3 pb-4">
+            <div className="shrink-0 px-3 pb-4">
                 {/* A button that navigates, not a <button> nested in an <a> —
                     which is invalid markup and gives assistive tech two
                     conflicting controls in the same place. */}
@@ -67,7 +71,7 @@ const Sidebar = () => {
                 </Button>
             </div>
 
-            <nav aria-label="Primary" className="px-3">
+            <nav aria-label="Primary" className="shrink-0 px-3">
                 <ul className="space-y-0.5">
                     {PRIMARY_NAV.map((item) => {
                         const active = isNavItemActive(item, pathname);
@@ -112,6 +116,31 @@ const Sidebar = () => {
                         active={pathname.startsWith(ROUTES.SECURITY)}
                     />
                 </ul>
+
+                {/*
+                 * Staff only (plan.md §28.4). Below the customer's own links,
+                 * never mixed into them: a support agent is also a PayPro
+                 * customer, and their wallet must not become harder to find
+                 * because they have a job here.
+                 */}
+                {operations.length > 0 && (
+                    <>
+                        <p className="mt-6 px-3 pb-2 text-2xs font-medium uppercase text-text-muted">
+                            Operations
+                        </p>
+                        <ul className="space-y-0.5 pb-4">
+                            {operations.map((item) => (
+                                <SecondaryLink
+                                    key={item.to}
+                                    to={item.to}
+                                    icon={item.icon}
+                                    label={item.label}
+                                    active={isAdminNavItemActive(item, pathname)}
+                                />
+                            ))}
+                        </ul>
+                    </>
+                )}
             </nav>
         </aside>
     );

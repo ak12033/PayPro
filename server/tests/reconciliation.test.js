@@ -16,6 +16,7 @@ const makeUser = (balance) => User.create({
     email: `r${new mongoose.Types.ObjectId()}@example.com`,
     password: 'hashed',
     accountBalance: balance,
+    balanceMinor: Math.round(balance * 100),
 });
 
 const entry = (userId, type, amount, extra = {}) => Transaction.create({
@@ -56,9 +57,29 @@ describe('reconciliation: balance drift', () => {
         expect(drift.drift).toBe(-400);
     });
 
-    it('tolerates sub-paise rounding noise', async () => {
-        const user = await makeUser(100.001);
+    it('ignores float noise in the rupee column — the comparison is in integer paise', async () => {
+        const user = await makeUser(100);
+        await User.updateOne({ _id: user._id }, { $set: { accountBalance: 100.00000000000001 } });
         await entry(user._id, 'Credit', 100);
+
+        expect(await reconcileBalances()).toHaveLength(0);
+    });
+
+    it('has zero tolerance: a single paisa of drift is reported', async () => {
+        const user = await makeUser(100.01);
+        await entry(user._id, 'Credit', 100);
+
+        const [drift] = await reconcileBalances();
+        expect(drift.driftMinor).toBe(1);
+        expect(drift.drift).toBe(0.01);
+    });
+
+    it('sums rows that predate amountMinor by deriving it from amount', async () => {
+        const user = await makeUser(19.99);
+        await Transaction.collection.insertOne({
+            userId: user._id, description: 'legacy', amount: 19.99, type: 'Credit',
+            status: 'SUCCESS', settlement: 'settled', invoiceId: `T${new mongoose.Types.ObjectId()}`,
+        });
 
         expect(await reconcileBalances()).toHaveLength(0);
     });

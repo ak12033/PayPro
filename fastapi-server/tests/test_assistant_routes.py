@@ -160,6 +160,11 @@ async def test_tools_always_use_the_authenticated_id(db):
     result = await assistant.execute_tool(user_id, "getWalletBalance", {})
     assert result == {"balance": 250.5}
 
+    # balanceMinor (integer paise) wins over the rupee column when present.
+    db.store["users"] = [{"_id": user_id, "accountBalance": 999.0, "balanceMinor": 25050}]
+    result = await assistant.execute_tool(user_id, "getWalletBalance", {})
+    assert result == {"balance": 250.5}
+
     await assistant.execute_tool(user_id, "getTransactions", {"limit": 999, "type": "Debit"})
     find = next(call for call in db["transactions"].calls if call[0] == "find")
     assert find[1] == {"userId": user_id, "type": "Debit"}
@@ -169,17 +174,22 @@ async def test_tools_always_use_the_authenticated_id(db):
 async def test_spending_analytics_is_aggregated_in_the_database(db):
     """The totals must come back from one pipeline, not a full collection scan."""
     user_id = ObjectId(USER_ID)
+    # The pipeline sums integer paise (plan.md §7.4 step 3)...
     db.store["transactions:aggregate"] = [
-        {"totalSent": 5400, "totalReceived": 100, "totalAdded": 10000, "totalTransactions": 7}
+        {"totalSent": 540050, "totalReceived": 10000, "totalAdded": 1000000, "totalTransactions": 7}
     ]
 
     result = await assistant.execute_tool(user_id, "getSpendingAnalytics", {})
 
-    assert result["totalSent"] == 5400
+    # ...and the repository converts to rupees once, for the model.
+    assert result["totalSent"] == 5400.5
+    assert result["totalReceived"] == 100
+    assert result["totalAdded"] == 10000
     assert result["totalTransactions"] == 7
     stage = db["transactions"].calls[0]
     assert stage[0] == "aggregate"
     assert stage[1][0] == {"$match": {"userId": user_id}}
+    assert "$amountMinor" in str(stage[1][1])
 
 
 @pytest.mark.asyncio
@@ -218,3 +228,14 @@ def test_history_window_starts_on_a_user_turn():
 
 def test_history_with_no_user_turn_is_dropped():
     assert assistant._history_contents([{"sender": "ai", "text": "orphan"}]) == []
+
+
+def test_system_instruction_refuses_investment_advice_and_identity_numbers():
+    """plan.md §21 and §23.6: the assistant must refuse investment advice, and
+    §40.2 item 6: KYC data never reaches the AI service. These are prompt rules,
+    so they are pinned here rather than left to an edit that reads fine."""
+    text = assistant.SYSTEM_INSTRUCTION
+    assert "Never give investment advice" in text
+    assert "SEBI-registered investment adviser" in text
+    assert "Never present any number as a credit score" in text
+    assert "Never ask for, repeat or store PAN, Aadhaar" in text
