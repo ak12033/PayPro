@@ -31,7 +31,7 @@ pymongo==4.18.1
 
 # Verifies the access tokens the Node backend signs, so this service can
 # authenticate the SPA locally without calling back into Node.
-PyJWT==2.14.0
+PyJWT==2.15.0
 
 # Error tracking (plan.md §39.2). Only imported when SENTRY_DSN is set — see
 # app/observability.py, which also scrubs PII before anything is sent.
