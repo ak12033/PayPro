@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
-import { Receipt, Plus, Sparkles } from 'lucide-react';
+import { Receipt, Plus } from 'lucide-react';
+import LogoMark from '../../components/ui/LogoMark';
 import PageHeader from '../../components/layout/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -33,11 +34,11 @@ import { BILL_DISCLAIMER } from '../../constants/recurring';
  * "Mark paid".
  */
 const Bills = () => {
-    const bills = useQuery(async () => (await billApi.list()).data?.bills ?? []);
-    const recurring = useQuery(async () => (await recurringApi.list('active')).data?.recurring ?? []);
+    const bills = useQuery(async () => (await billApi.list()).data?.bills ?? [], { key: 'bills:list' });
+    const recurring = useQuery(async () => (await recurringApi.list('active')).data?.recurring ?? [], { key: 'recurring:active' });
     // Paying through PayPro exists only when a provider does (plan.md §19.3);
     // without one this stays a reminders screen and shows no pay button at all.
-    const payments = useQuery(async () => (await billPaymentApi.status()).data);
+    const payments = useQuery(async () => (await billPaymentApi.status()).data, { key: 'bills:payments-status' });
     const [paying, setPaying] = useState(false);
 
     const [editing, setEditing] = useState(null);
@@ -174,7 +175,7 @@ const Bills = () => {
                             }
                             secondaryAction={
                                 hasDetections && (
-                                    <Button variant="ghost" icon={<Sparkles size={14} />} onClick={handleSeed} loading={saving}>
+                                    <Button variant="ghost" icon={<LogoMark size={14} />} onClick={handleSeed} loading={saving}>
                                         Use what we spotted
                                     </Button>
                                 )

@@ -18,6 +18,7 @@ import BankAccountSheet from '../../features/withdraw/BankAccountSheet';
 import DocumentUploader from '../../features/verification/DocumentUploader';
 import useQuery from '../../hooks/useQuery';
 import { useAuth } from '../../context/AuthContext';
+import { useAssistant } from '../../context/useAssistant';
 import { withdrawalApi } from '../../services/api/endpoints/withdrawalApi';
 import { createIdempotencyKey } from '../../lib/idempotency';
 import { getErrorMessage } from '../../utils/errors';
@@ -39,6 +40,7 @@ import { BANK_ACCOUNT_STATUS_META, BANK_DOCUMENT_LABEL, WITHDRAWAL_STATUS_META }
  */
 const Withdraw = () => {
     const { balanceMinor, user } = useAuth();
+    const assistant = useAssistant();
     const data = useQuery(async () => {
         const [withdrawals, accounts] = await Promise.all([withdrawalApi.list(), withdrawalApi.listBankAccounts()]);
         return { ...withdrawals.data, accounts: accounts.data.accounts };
@@ -190,7 +192,7 @@ const Withdraw = () => {
                                 )}
                                 <Button
                                     variant="primary"
-                                    fullWidth
+                                    fullWidth="mobile"
                                     disabled={!amount || tooMuch || tooLittle || atOpenLimit || !selected}
                                     onClick={() => setConfirming({ key: createIdempotencyKey() })}
                                 >
@@ -266,6 +268,24 @@ const Withdraw = () => {
                                                         <Badge tone={meta?.tone} size="sm" dot>{meta?.label ?? w.status}</Badge>
                                                         {w.status === 'requested' && (
                                                             <Button variant="ghost" size="sm" onClick={() => setCancelling(w)}>Cancel</Button>
+                                                        )}
+                                                        {['rejected', 'failed'].includes(w.status) && assistant.available && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                aria-label="Ask the assistant why this withdrawal didn't go through"
+                                                                onClick={() =>
+                                                                    assistant.openAssistant({
+                                                                        prompt:
+                                                                            w.status === 'rejected'
+                                                                                ? "Why wasn't my withdrawal approved?"
+                                                                                : 'Why did my withdrawal fail?',
+                                                                        resource: { type: 'withdrawal', id: w._id },
+                                                                    })
+                                                                }
+                                                            >
+                                                                Why?
+                                                            </Button>
                                                         )}
                                                     </span>
                                                 }

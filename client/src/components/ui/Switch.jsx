@@ -58,7 +58,7 @@ const Switch = ({
                     aria-hidden="true"
                     className={cn(
                         'flex h-6 w-11 items-center rounded-pill p-0.5',
-                        'transition-colors duration-[--duration-fast] ease-[--ease-out]',
+                        'transition-colors duration-(--duration-fast) ease-(--ease-out)',
                         'peer-focus-visible:outline peer-focus-visible:outline-2',
                         'peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus',
                         'peer-disabled:opacity-50',
@@ -75,7 +75,10 @@ const Switch = ({
                             // disappear into its own track. A constant white
                             // puck is also what every platform switch does.
                             'grid h-5 w-5 place-items-center rounded-full bg-white shadow-raised',
-                            'transition-transform duration-[--duration-fast] ease-[--ease-out]',
+                            // A slight overshoot as the knob lands: the one
+                            // place a spring explains something, since it is
+                            // the moment the setting actually changes.
+                            'transition-transform duration-(--duration-normal) ease-(--ease-spring)',
                             checked && 'translate-x-5'
                         )}
                     >

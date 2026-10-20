@@ -28,7 +28,7 @@ const PasswordStrengthMeter = ({ password = '' }) => {
                     <span
                         key={index}
                         className={cn(
-                            'h-1 flex-1 rounded-pill transition-colors duration-[--duration-fast]',
+                            'h-1 flex-1 rounded-pill transition-colors duration-(--duration-fast)',
                             index < strength.score ? strength.tone : 'bg-border'
                         )}
                     />

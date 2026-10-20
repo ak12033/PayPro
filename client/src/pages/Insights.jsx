@@ -1,16 +1,15 @@
-import React, { Suspense, lazy, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Sparkles, TrendingUp, PiggyBank, Target, ArrowRight, Receipt, Calculator, Scale } from 'lucide-react';
+import React, { Suspense, lazy } from 'react';
+import { TrendingUp, PiggyBank, Target, Receipt, Calculator, Scale } from 'lucide-react';
+import LogoMark from '../components/ui/LogoMark';
 import PageHeader, { SectionHeading } from '../components/layout/PageHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Skeleton from '../components/ui/Skeleton';
 import Amount from '../components/ui/Amount';
-import IconBadge from '../components/ui/IconBadge';
+import LinkCard from '../components/ui/LinkCard';
 import EmptyState from '../components/feedback/EmptyState';
 import ErrorState from '../components/feedback/ErrorState';
 import InsightCard from '../features/ai/InsightCard';
-import AssistantSheet from '../features/ai/AssistantSheet';
 import CashFlowSummary from '../features/dashboard/CashFlowSummary';
 import MerchantBreakdown from '../features/dashboard/MerchantBreakdown';
 import TopExpenses from '../features/dashboard/TopExpenses';
@@ -27,6 +26,7 @@ import FinancialHealthCard from '../features/health/FinancialHealthCard';
 import UpcomingCard from '../features/recurring/UpcomingCard';
 import { toRupees } from '../constants/budget';
 import { ROUTES } from '../constants/routes';
+import { useAssistant } from '../context/useAssistant';
 
 /**
  * Recharts, loaded here and nowhere else.
@@ -73,18 +73,18 @@ const SpendingChart = lazy(() => import('../features/insights/SpendingChart'));
  * it is not financial advice.
  */
 const Insights = () => {
-    const [assistantOpen, setAssistantOpen] = useState(false);
+    const { openAssistant } = useAssistant();
 
-    const summary = useQuery(async () => (await transactionApi.getSummary()).data);
+    const summary = useQuery(async () => (await transactionApi.getSummary()).data, { key: 'insights:summary' });
     const budget = useBudget();
     const goals = useGoals('active');
-    const cashflow = useQuery(async () => (await analyticsApi.getCashflow('6M')).data);
-    const merchants = useQuery(async () => (await analyticsApi.getMerchants('1M', 8)).data?.merchants ?? []);
-    const topExpenses = useQuery(async () => (await analyticsApi.getTopExpenses('1M', 8)).data?.transactions ?? []);
-    const rhythm = useQuery(async () => (await analyticsApi.getSpendingRhythm('3M')).data);
-    const deterministicInsights = useQuery(async () => (await insightsApi.list('active')).data?.insights ?? []);
-    const health = useQuery(async () => (await analyticsApi.getFinancialHealth()).data);
-    const upcoming = useQuery(async () => (await recurringApi.getUpcoming(30)).data);
+    const cashflow = useQuery(async () => (await analyticsApi.getCashflow('6M')).data, { key: 'insights:cashflow:6M' });
+    const merchants = useQuery(async () => (await analyticsApi.getMerchants('1M', 8)).data?.merchants ?? [], { key: 'insights:merchants:1M' });
+    const topExpenses = useQuery(async () => (await analyticsApi.getTopExpenses('1M', 8)).data?.transactions ?? [], { key: 'insights:top-expenses:1M' });
+    const rhythm = useQuery(async () => (await analyticsApi.getSpendingRhythm('3M')).data, { key: 'insights:rhythm:3M' });
+    const deterministicInsights = useQuery(async () => (await insightsApi.list('active')).data?.insights ?? [], { key: 'insights:deterministic' });
+    const health = useQuery(async () => (await analyticsApi.getFinancialHealth()).data, { key: 'insights:health' });
+    const upcoming = useQuery(async () => (await recurringApi.getUpcoming(30)).data, { key: 'recurring:upcoming:30' });
 
     /**
      * Insights are fetched on demand, not on mount.
@@ -165,83 +165,34 @@ const Insights = () => {
             <section className="mt-6 grid gap-3 sm:grid-cols-2" aria-labelledby="money-management-heading">
                 <h2 id="money-management-heading" className="sr-only">Budgets and goals</h2>
 
-                <Link to={ROUTES.BUDGETS} className="block">
-                    <Card className="transition-[background-color,transform,box-shadow] duration-[--duration-fast] ease-[--ease-out] hover:-translate-y-1 hover:bg-surface-hover hover:shadow-raised">
-                        <div className="flex items-start gap-3">
-                            <IconBadge icon={<PiggyBank size={17} />} tone="accent" />
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-text">Budgets</p>
-                                {budget.data?.budget ? (
-                                    <p className="mt-0.5 text-xs leading-5 text-text-muted">
-                                        <Amount minor={budget.data.spend.totalMinor} size="sm" showFraction={false} />
-                                        {budget.data.budget.totalLimitMinor != null && ` of ₹${toRupees(budget.data.budget.totalLimitMinor).toFixed(0)} spent`}
-                                    </p>
-                                ) : (
-                                    <p className="mt-0.5 text-xs leading-5 text-text-muted">Set a monthly limit</p>
-                                )}
-                            </div>
-                            <ArrowRight size={16} className="mt-1 shrink-0 text-text-muted" aria-hidden="true" />
-                        </div>
-                    </Card>
-                </Link>
+                <LinkCard to={ROUTES.BUDGETS} icon={<PiggyBank size={17} />} tone="accent" title="Budgets">
+                    {budget.data?.budget ? (
+                        <>
+                            <Amount minor={budget.data.spend.totalMinor} size="sm" showFraction={false} />
+                            {budget.data.budget.totalLimitMinor != null && ` of ₹${toRupees(budget.data.budget.totalLimitMinor).toFixed(0)} spent`}
+                        </>
+                    ) : (
+                        'Set a monthly limit'
+                    )}
+                </LinkCard>
 
-                <Link to={ROUTES.GOALS} className="block">
-                    <Card className="transition-[background-color,transform,box-shadow] duration-[--duration-fast] ease-[--ease-out] hover:-translate-y-1 hover:bg-surface-hover hover:shadow-raised">
-                        <div className="flex items-start gap-3">
-                            <IconBadge icon={<Target size={17} />} tone="positive" />
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-text">Goals</p>
-                                <p className="mt-0.5 text-xs leading-5 text-text-muted">
-                                    {goals.data?.length ? `${goals.data.length} active` : 'Start tracking a savings goal'}
-                                </p>
-                            </div>
-                            <ArrowRight size={16} className="mt-1 shrink-0 text-text-muted" aria-hidden="true" />
-                        </div>
-                    </Card>
-                </Link>
+                <LinkCard to={ROUTES.GOALS} icon={<Target size={17} />} tone="positive" title="Goals">
+                    {goals.data?.length ? `${goals.data.length} active` : 'Start tracking a savings goal'}
+                </LinkCard>
 
-                <Link to={ROUTES.BILLS} className="block">
-                    <Card className="transition-[background-color,transform,box-shadow] duration-[--duration-fast] ease-[--ease-out] hover:-translate-y-1 hover:bg-surface-hover hover:shadow-raised">
-                        <div className="flex items-start gap-3">
-                            <IconBadge icon={<Receipt size={17} />} tone="warning" />
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-text">Bills &amp; repeat payments</p>
-                                <p className="mt-0.5 text-xs leading-5 text-text-muted">
-                                    {upcoming.data?.items?.length
-                                        ? `${upcoming.data.items.length} expected in 30 days`
-                                        : 'Reminders only — PayPro never pays them'}
-                                </p>
-                            </div>
-                            <ArrowRight size={16} className="mt-1 shrink-0 text-text-muted" aria-hidden="true" />
-                        </div>
-                    </Card>
-                </Link>
+                <LinkCard to={ROUTES.BILLS} icon={<Receipt size={17} />} tone="warning" title="Bills & repeat payments">
+                    {upcoming.data?.items?.length
+                        ? `${upcoming.data.items.length} expected in 30 days`
+                        : 'Reminders only — PayPro never pays them'}
+                </LinkCard>
 
-                <Link to={ROUTES.TOOLS} className="block">
-                    <Card className="transition-[background-color,transform,box-shadow] duration-[--duration-fast] ease-[--ease-out] hover:-translate-y-1 hover:bg-surface-hover hover:shadow-raised">
-                        <div className="flex items-start gap-3">
-                            <IconBadge icon={<Calculator size={17} />} tone="neutral" />
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-text">Calculators</p>
-                                <p className="mt-0.5 text-xs leading-5 text-text-muted">Work out an EMI</p>
-                            </div>
-                            <ArrowRight size={16} className="mt-1 shrink-0 text-text-muted" aria-hidden="true" />
-                        </div>
-                    </Card>
-                </Link>
+                <LinkCard to={ROUTES.TOOLS} icon={<Calculator size={17} />} tone="neutral" title="Calculators">
+                    Work out an EMI
+                </LinkCard>
 
-                <Link to={ROUTES.PORTFOLIO} className="block">
-                    <Card className="transition-[background-color,transform,box-shadow] duration-[--duration-fast] ease-[--ease-out] hover:-translate-y-1 hover:bg-surface-hover hover:shadow-raised">
-                        <div className="flex items-start gap-3">
-                            <IconBadge icon={<Scale size={17} />} tone="neutral" />
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-text">Net worth</p>
-                                <p className="mt-0.5 text-xs leading-5 text-text-muted">Track investments and debts you hold elsewhere</p>
-                            </div>
-                            <ArrowRight size={16} className="mt-1 shrink-0 text-text-muted" aria-hidden="true" />
-                        </div>
-                    </Card>
-                </Link>
+                <LinkCard to={ROUTES.PORTFOLIO} icon={<Scale size={17} />} tone="neutral" title="Net worth">
+                    Track investments and debts you hold elsewhere
+                </LinkCard>
             </section>
 
             {/* ------------------------------------------------ what's coming */}
@@ -331,7 +282,7 @@ const Insights = () => {
                                 aria-hidden="true"
                                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ai-soft text-ai"
                             >
-                                <Sparkles size={17} />
+                                <LogoMark size={17} />
                             </span>
                             <div className="min-w-0 flex-1">
                                 <h3 className="text-sm font-semibold text-text">
@@ -345,7 +296,7 @@ const Insights = () => {
                                     variant="ai"
                                     className="mt-3"
                                     onClick={insights.retry}
-                                    icon={<Sparkles size={15} />}
+                                    icon={<LogoMark size={15} />}
                                 >
                                     Generate insights
                                 </Button>
@@ -364,13 +315,11 @@ const Insights = () => {
                             "How much did I spend on food last month?"
                         </p>
                     </div>
-                    <Button variant="secondary" onClick={() => setAssistantOpen(true)}>
+                    <Button variant="secondary" onClick={() => openAssistant()}>
                         Open assistant
                     </Button>
                 </div>
             </Card>
-
-            <AssistantSheet open={assistantOpen} onClose={() => setAssistantOpen(false)} />
         </>
     );
 };

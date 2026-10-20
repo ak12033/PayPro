@@ -73,7 +73,7 @@ const ScoreMeter = ({
             >
                 <div
                     className={cn(
-                        'h-full rounded-pill transition-[width,background-color] duration-[--duration-slow] ease-[--ease-out]',
+                        'h-full rounded-pill transition-[width,background-color] duration-(--duration-slow) ease-(--ease-out)',
                         TONE_CLASSES[resolvedTone]
                     )}
                     style={{ width: `${percent}%` }}

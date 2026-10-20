@@ -1,9 +1,10 @@
 import React, { Suspense, lazy, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
+import LogoMark from '../components/ui/LogoMark';
 import { useAuth } from '../context/AuthContext';
 import BalanceCard from '../features/wallet/BalanceCard';
 import TransactionDetailSheet from '../features/transactions/TransactionDetailSheet';
+import { useAssistant } from '../context/useAssistant';
 import ActivityTimeline from '../features/dashboard/ActivityTimeline';
 import TimeframeSelector from '../features/dashboard/TimeframeSelector';
 import KpiTile from '../features/dashboard/KpiTile';
@@ -13,8 +14,7 @@ import { useCategoryBreakdown } from '../features/dashboard/hooks/useCategoryBre
 import { useNetworkGrowth } from '../features/dashboard/hooks/useNetworkGrowth';
 import { usePaymentsStatus } from '../features/dashboard/hooks/usePaymentsStatus';
 import { SectionHeading } from '../components/layout/PageHeader';
-import Card from '../components/ui/Card';
-import IconBadge from '../components/ui/IconBadge';
+import LinkCard from '../components/ui/LinkCard';
 import AmbientGlow from '../components/ui/AmbientGlow';
 import BudgetSummaryCard from '../features/budget/BudgetSummaryCard';
 import VerifyEmailBanner from '../features/account/VerifyEmailBanner';
@@ -51,6 +51,16 @@ const SuccessRateKpi = lazy(() => import('../features/dashboard/SuccessRateKpi')
 const Home = () => {
     const { userName, balanceMinor, recentTransactions, isCheckingAuth } = useAuth();
     const [selected, setSelected] = useState(null);
+    const assistant = useAssistant();
+
+    // The detail sheet closes first: two modals stacked would fight over focus.
+    const explain = (tx) => {
+        setSelected(null);
+        assistant.openAssistant({
+            prompt: 'Explain this transaction',
+            resource: { type: 'transaction', id: tx._id },
+        });
+    };
     const [range, setRange] = useState('1M');
 
     const overview = useDashboardOverview(range);
@@ -71,7 +81,7 @@ const Home = () => {
                 it gets a much quieter version of the same glow the landing and
                 auth screens use — a dashboard someone checks dozens of times a
                 day should not compete with the numbers on it. */}
-            <div className="relative overflow-hidden">
+            <div className="relative">
                 <AmbientGlow className="pointer-events-none absolute inset-0 -z-10 overflow-hidden opacity-[0.05]" />
 
                 <h1 className="mb-4 text-sm font-normal text-text-muted">
@@ -210,41 +220,20 @@ const Home = () => {
 
             {/* ---------------------------------------------------- quick links */}
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <Link to={ROUTES.INSIGHTS} className="block">
-                    <Card className="transition-[background-color,transform,box-shadow] duration-[--duration-fast] ease-[--ease-out] hover:-translate-y-1 hover:bg-surface-hover hover:shadow-raised">
-                        <div className="flex items-start gap-3">
-                            <IconBadge icon={<Sparkles size={17} />} tone="ai" />
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-text">Spending insights</p>
-                                <p className="mt-0.5 text-xs leading-5 text-text-muted">
-                                    See where your money went this month and what changed.
-                                </p>
-                            </div>
-                            <ArrowRight size={16} className="mt-1 shrink-0 text-text-muted" aria-hidden="true" />
-                        </div>
-                    </Card>
-                </Link>
+                <LinkCard to={ROUTES.INSIGHTS} icon={<LogoMark size={17} />} tone="ai" title="Spending insights">
+                    See where your money went this month and what changed.
+                </LinkCard>
 
-                <Link to={ROUTES.SECURITY} className="block">
-                    <Card className="transition-[background-color,transform,box-shadow] duration-[--duration-fast] ease-[--ease-out] hover:-translate-y-1 hover:bg-surface-hover hover:shadow-raised">
-                        <div className="flex items-start gap-3">
-                            <IconBadge icon={<ShieldCheck size={17} />} tone="positive" />
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-text">Security</p>
-                                <p className="mt-0.5 text-xs leading-5 text-text-muted">
-                                    Review your signed-in devices and recent sign-in attempts.
-                                </p>
-                            </div>
-                            <ArrowRight size={16} className="mt-1 shrink-0 text-text-muted" aria-hidden="true" />
-                        </div>
-                    </Card>
-                </Link>
+                <LinkCard to={ROUTES.SECURITY} icon={<ShieldCheck size={17} />} tone="positive" title="Security">
+                    Review your signed-in devices and recent sign-in attempts.
+                </LinkCard>
             </div>
 
             <TransactionDetailSheet
                 transaction={selected}
                 open={Boolean(selected)}
                 onClose={() => setSelected(null)}
+                onExplain={assistant.available ? explain : undefined}
             />
         </>
     );

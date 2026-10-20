@@ -102,7 +102,15 @@ const AgentTicketSheet = ({ open, onClose, ticket, loading, error, onReply, onAs
                         {['urgent', 'high'].includes(ticket.priority) && (
                             <Badge tone="negative">{ticket.priority === 'urgent' ? 'Urgent' : 'High priority'}</Badge>
                         )}
+                        {ticket.origin?.channel === 'agent' && <Badge tone="ai">Raised via assistant</Badge>}
                     </div>
+
+                    {ticket.origin?.channel === 'agent' && (
+                        <p className="rounded-control bg-ai-soft px-3 py-2.5 text-xs leading-5 text-text-secondary">
+                            The assistant opened this on the customer's behalf. The first message is an automated
+                            summary of what it checked — the customer's own words, where present, are labelled as theirs.
+                        </p>
+                    )}
 
                     {ticket.relatedRiskCaseId && (
                         <p className="rounded-control bg-warning-soft px-3 py-2.5 text-xs leading-5 text-warning">

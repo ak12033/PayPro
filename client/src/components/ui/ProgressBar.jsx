@@ -45,7 +45,7 @@ const ProgressBar = ({ value, max, tone, label, className }) => {
         >
             <div
                 className={cn(
-                    'h-full rounded-pill transition-[width,background-color] duration-[--duration-slow] ease-[--ease-out]',
+                    'h-full rounded-pill transition-[width,background-color] duration-(--duration-slow) ease-(--ease-out)',
                     TONE_CLASSES[resolvedTone]
                 )}
                 style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}

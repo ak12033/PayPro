@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Lock, Sparkles, Zap } from 'lucide-react';
+import { ArrowRight, Lock, Zap } from 'lucide-react';
+import LogoMark from '../components/ui/LogoMark';
 import Button from '../components/ui/Button';
 import IconBadge from '../components/ui/IconBadge';
 import NetworkMesh from '../components/ui/NetworkMesh';
@@ -34,12 +35,7 @@ const Landing = () => {
         <div className="flex min-h-dvh flex-col bg-canvas px-5 py-8">
             <header className="mx-auto flex w-full max-w-4xl items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span
-                        aria-hidden="true"
-                        className="grid h-8 w-8 place-items-center rounded-control bg-gradient-brand text-on-accent"
-                    >
-                        <Sparkles size={17} />
-                    </span>
+                    <LogoMark size={32} />
                     <span className="text-base font-semibold tracking-tight text-text">
                         {APP_NAME}
                     </span>
@@ -101,7 +97,7 @@ const Landing = () => {
                         description="Confirm payments with an emailed code before they leave your wallet."
                     />
                     <Feature
-                        icon={Sparkles}
+                        icon={LogoMark}
                         title="Spending you can read"
                         description="Every transaction categorised, searchable and exportable."
                     />

@@ -40,7 +40,7 @@ const TransactionRow = ({ transaction, onSelect, className }) => {
                 onClick={() => onSelect?.(transaction)}
                 className={cn(
                     'flex w-full items-center gap-3 rounded-card px-2 py-3 text-left',
-                    'transition-colors duration-[--duration-fast]',
+                    'transition-colors duration-(--duration-fast)',
                     'hover:bg-surface-hover active:bg-surface-active',
                     className
                 )}

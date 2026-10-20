@@ -8,6 +8,7 @@
 
 export { default as Button, IconButton } from './Button';
 export { default as Card, CardHeader } from './Card';
+export { default as LinkCard } from './LinkCard';
 export { default as Badge } from './Badge';
 export { default as Avatar, getInitials } from './Avatar';
 export { default as IconBadge } from './IconBadge';

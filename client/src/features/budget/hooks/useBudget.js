@@ -19,7 +19,7 @@ export const useBudget = (period = null) => {
             if (err?.response?.status === 404) return null;
             throw err;
         }
-    }, { deps: [period] });
+    }, { deps: [period], key: `budget:${period ?? 'current'}` });
     const { subscribe } = useSocket() ?? {};
 
     useEffect(() => {

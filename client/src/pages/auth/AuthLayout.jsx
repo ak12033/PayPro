@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
+import LogoMark from '../../components/ui/LogoMark';
 import Card from '../../components/ui/Card';
 import NetworkMesh from '../../components/ui/NetworkMesh';
 import AmbientGlow from '../../components/ui/AmbientGlow';
@@ -47,12 +47,7 @@ const AuthLayout = ({ title, subtitle, children, footer }) => (
                 to={ROUTES.WELCOME}
                 className="mx-auto mb-7 inline-flex items-center gap-2 rounded-control"
             >
-                <span
-                    aria-hidden="true"
-                    className="grid h-8 w-8 place-items-center rounded-control bg-gradient-brand text-on-accent"
-                >
-                    <Sparkles size={17} />
-                </span>
+                <LogoMark size={32} />
                 <span className="text-base font-semibold tracking-tight text-text">
                     {APP_NAME}
                 </span>

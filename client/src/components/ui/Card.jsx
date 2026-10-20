@@ -40,14 +40,30 @@ const PADDING = {
     lg: 'p-5 sm:p-6',
 };
 
+/**
+ * Hover treatment for a card that is itself a target (wrapped in a link, or
+ * opening a sheet). It grows slightly in place and picks up the accent
+ * hairline and a soft shadow. Scaling from the centre never reflows the
+ * cards around it, and `motion-safe` keeps it still for anyone who has
+ * asked for reduced motion.
+ *
+ * `group` is set so content can react with the card. LinkCard uses it to tint
+ * its title and arrow.
+ */
+const INTERACTIVE = cn(
+    'group cursor-pointer',
+    'transition-[scale,box-shadow,border-color,background-color] duration-(--duration-normal) ease-(--ease-out)',
+    'motion-safe:hover:scale-[1.02] hover:border-accent-border hover:shadow-lift-card'
+);
+
 const Card = React.forwardRef(function Card(
-    { as: Tag = 'div', variant = 'plain', padding = 'lg', className, children, ...rest },
+    { as: Tag = 'div', variant = 'plain', padding = 'lg', interactive = false, className, children, ...rest },
     ref
 ) {
     return (
         <Tag
             ref={ref}
-            className={cn('rounded-card', VARIANTS[variant], PADDING[padding], className)}
+            className={cn('rounded-card', VARIANTS[variant], PADDING[padding], interactive && INTERACTIVE, className)}
             {...rest}
         >
             {children}

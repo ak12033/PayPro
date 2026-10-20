@@ -187,7 +187,7 @@ const CategoryBreakdown = ({ categories, loading, error, onRetry }) => {
                                 instead of sitting static. */}
                             <div
                                 aria-hidden="true"
-                                className="absolute inset-[10%] rounded-full transition-opacity duration-[--duration-slow] ease-[--ease-out]"
+                                className="absolute inset-[10%] rounded-full transition-opacity duration-(--duration-slow) ease-(--ease-out)"
                                 style={{
                                     background: 'radial-gradient(circle, var(--color-accent-soft) 0%, transparent 72%)',
                                     opacity: activeKey ? 0.95 : 0.7,
@@ -199,7 +199,7 @@ const CategoryBreakdown = ({ categories, loading, error, onRetry }) => {
                                 text. */}
                             <div
                                 aria-hidden="true"
-                                className="absolute inset-[36%] rounded-full transition-opacity duration-[--duration-slow] ease-[--ease-out]"
+                                className="absolute inset-[36%] rounded-full transition-opacity duration-(--duration-slow) ease-(--ease-out)"
                                 style={{
                                     background:
                                         'radial-gradient(circle, color-mix(in srgb, var(--color-accent) 22%, transparent) 0%, transparent 75%)',
@@ -307,14 +307,14 @@ const CategoryBreakdown = ({ categories, loading, error, onRetry }) => {
                                             onClick={() => goToCategory(slice)}
                                             className={cn(
                                                 'flex w-full items-center gap-3 rounded-control border border-transparent px-2 py-2 text-left',
-                                                'transition-colors duration-[--duration-fast] ease-[--ease-out]',
+                                                'transition-colors duration-(--duration-fast) ease-(--ease-out)',
                                                 slice.navigable ? 'cursor-pointer hover:bg-surface-hover' : 'cursor-default',
                                                 isActive && 'border-border bg-surface-sunken'
                                             )}
                                         >
                                             <span
                                                 aria-hidden="true"
-                                                className="h-2.5 w-2.5 shrink-0 rounded-full transition-shadow duration-[--duration-fast] ease-[--ease-out]"
+                                                className="h-2.5 w-2.5 shrink-0 rounded-full transition-shadow duration-(--duration-fast) ease-(--ease-out)"
                                                 style={{
                                                     backgroundColor: slice.color,
                                                     boxShadow: isActive ? swatchGlow(slice.color) : 'none',

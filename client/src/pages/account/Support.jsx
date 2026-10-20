@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { LifeBuoy, Plus, ChevronDown } from 'lucide-react';
+import LogoMark from '../../components/ui/LogoMark';
 import PageHeader, { SectionHeading } from '../../components/layout/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -12,6 +13,7 @@ import ErrorState from '../../components/feedback/ErrorState';
 import NewTicketSheet from '../../features/support/NewTicketSheet';
 import TicketThread from '../../features/support/TicketThread';
 import useQuery from '../../hooks/useQuery';
+import { useAssistant } from '../../context/useAssistant';
 import { supportApi } from '../../services/api/endpoints/supportApi';
 import { getErrorMessage } from '../../utils/errors';
 import { formatRelativeTime } from '../../utils/formatters';
@@ -27,13 +29,14 @@ import cn from '../../lib/cn';
  * nobody needed to open. The tickets are right below for when it isn't.
  */
 const Support = () => {
-    const faq = useQuery(async () => (await supportApi.getFaq()).data?.faq ?? []);
-    const tickets = useQuery(async () => (await supportApi.listTickets()).data?.tickets ?? []);
+    const faq = useQuery(async () => (await supportApi.getFaq()).data?.faq ?? [], { key: 'support:faq' });
+    const tickets = useQuery(async () => (await supportApi.listTickets()).data?.tickets ?? [], { key: 'support:tickets' });
 
     const [composerOpen, setComposerOpen] = useState(false);
     const [activeTicketId, setActiveTicketId] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [openFaq, setOpenFaq] = useState(null);
+    const assistant = useAssistant();
 
     const activeTicket = useQuery(
         async () => (await supportApi.getTicket(activeTicketId)).data?.ticket ?? null,
@@ -97,6 +100,30 @@ const Support = () => {
             />
 
             <div className="space-y-6">
+                {assistant.available && (
+                    <Card padding="md">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex min-w-0 items-start gap-3">
+                                <span
+                                    aria-hidden="true"
+                                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ai-soft text-ai"
+                                >
+                                    <LogoMark size={17} />
+                                </span>
+                                <div className="min-w-0">
+                                    <h2 className="text-sm font-semibold text-text">Get instant help</h2>
+                                    <p className="mt-0.5 text-sm text-text-muted">
+                                        The assistant can check a payment or withdrawal and raise a ticket for you.
+                                    </p>
+                                </div>
+                            </div>
+                            <Button variant="ai" onClick={() => assistant.openAssistant()}>
+                                Ask the assistant
+                            </Button>
+                        </div>
+                    </Card>
+                )}
+
                 <section>
                     <SectionHeading title="Common questions" />
                     <Card padding="none">
@@ -122,7 +149,7 @@ const Support = () => {
                                                     size={16}
                                                     aria-hidden="true"
                                                     className={cn(
-                                                        'mt-0.5 shrink-0 text-text-muted transition-transform duration-[--duration-fast]',
+                                                        'mt-0.5 shrink-0 text-text-muted transition-transform duration-(--duration-fast)',
                                                         expanded && 'rotate-180'
                                                     )}
                                                 />

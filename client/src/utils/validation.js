@@ -18,6 +18,21 @@ export const toAmount = (value) => {
     return Number.isFinite(parsed) ? parsed : 0;
 };
 
+/**
+ * A `?amount=` query value, as a string the amount field accepts, or ''.
+ *
+ * Links into the top-up form (the assistant's "Try again", plan.md §43.3)
+ * prefill the amount; they never submit it. Anything that is not a plain
+ * positive rupee amount with at most two decimals is ignored rather than
+ * coerced — `1e3`, `-5`, `0x10` and `500abc` all leave the field empty.
+ */
+export const parseAmountParam = (value) => {
+    const raw = String(value ?? '').trim();
+    if (!/^\d{1,7}(\.\d{1,2})?$/.test(raw)) return '';
+    const parsed = Number(raw);
+    return parsed > 0 ? String(parsed) : '';
+};
+
 export const isCompleteOtp = (value, length = 6) =>
     String(value ?? '').length === length;
 

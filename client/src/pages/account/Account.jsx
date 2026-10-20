@@ -208,7 +208,7 @@ const Account = () => {
 
                     <Button
                         variant="secondary"
-                        fullWidth
+                        fullWidth="mobile"
                         className="mt-4"
                         icon={<UserPen size={16} />}
                         onClick={() => setEditing(true)}
@@ -469,14 +469,16 @@ const Account = () => {
                 </section>
 
                 {/* ------------------------------------------------- sign out */}
-                <Button
-                    variant="secondary"
-                    fullWidth
-                    icon={<LogOut size={16} />}
-                    onClick={() => setConfirmLogout(true)}
-                >
-                    Sign out
-                </Button>
+                <div className="flex justify-center">
+                    <Button
+                        variant="secondary"
+                        fullWidth="mobile"
+                        icon={<LogOut size={16} />}
+                        onClick={() => setConfirmLogout(true)}
+                    >
+                        Sign out
+                    </Button>
+                </div>
 
                 <p className="pb-2 text-center text-xs text-text-muted">
                     {APP_NAME} · Your money is held in your wallet balance

@@ -12,6 +12,7 @@ import EmptyState from '../components/feedback/EmptyState';
 import ErrorState from '../components/feedback/ErrorState';
 import TransactionRow from '../features/transactions/TransactionRow';
 import TransactionDetailSheet from '../features/transactions/TransactionDetailSheet';
+import { useAssistant } from '../context/useAssistant';
 import useQuery from '../hooks/useQuery';
 import useDebouncedValue from '../hooks/useDebouncedValue';
 import { useSocket } from '../context/SocketContext';
@@ -60,6 +61,16 @@ import toast from 'react-hot-toast';
 const Activity = () => {
     const [params, setParams] = useSearchParams();
     const [selected, setSelected] = useState(null);
+    const assistant = useAssistant();
+
+    // The detail sheet closes first: two modals stacked would fight over focus.
+    const explain = (tx) => {
+        setSelected(null);
+        assistant.openAssistant({
+            prompt: 'Explain this transaction',
+            resource: { type: 'transaction', id: tx._id },
+        });
+    };
     const [exporting, setExporting] = useState(false);
     const [accumulated, setAccumulated] = useState([]);
     const [page, setPage] = useState(1);
@@ -353,10 +364,10 @@ const Activity = () => {
                         </ul>
 
                         {hasMore && (
-                            <div className="p-3">
+                            <div className="flex justify-center p-3">
                                 <Button
                                     variant="secondary"
-                                    fullWidth
+                                    fullWidth="mobile"
                                     loading={loading}
                                     onClick={() => setPage((current) => current + 1)}
                                 >
@@ -379,6 +390,7 @@ const Activity = () => {
                 transaction={selected}
                 open={Boolean(selected)}
                 onClose={() => setSelected(null)}
+                onExplain={assistant.available ? explain : undefined}
                 categories={categories}
                 onRecategorise={recategorise}
             />

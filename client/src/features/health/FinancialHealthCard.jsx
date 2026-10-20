@@ -122,7 +122,7 @@ const FinancialHealthCard = ({ health, loading }) => {
                 <ChevronDown
                     size={16}
                     aria-hidden="true"
-                    className={cn('transition-transform duration-[--duration-fast]', expanded && 'rotate-180')}
+                    className={cn('transition-transform duration-(--duration-fast)', expanded && 'rotate-180')}
                 />
             </button>
 

@@ -6,7 +6,6 @@ import Card from '../../components/ui/Card';
 import Button, { IconButton } from '../../components/ui/Button';
 import Skeleton from '../../components/ui/Skeleton';
 import Amount from '../../components/ui/Amount';
-import { usePointerTilt } from '../../hooks/usePointerTilt';
 import { ROUTES } from '../../constants/routes';
 
 const STORAGE_KEY = 'paypro-balance-hidden';
@@ -45,7 +44,6 @@ const BalanceCard = ({ balanceMinor, loading = false }) => {
      * the primary action, since it is the only thing that clears the debt.
      */
     const overdrawn = !loading && balanceMinor < 0;
-    const { ref: tiltRef } = usePointerTilt();
     const [hidden, setHidden] = useState(() => {
         try {
             return localStorage.getItem(STORAGE_KEY) === 'true';
@@ -83,11 +81,7 @@ const BalanceCard = ({ balanceMinor, loading = false }) => {
     };
 
     return (
-        <Card
-            ref={tiltRef}
-            variant="glass"
-            className="relative overflow-hidden transition-transform duration-[--duration-fast] ease-[--ease-in-out]"
-        >
+        <Card variant="glass" className="relative overflow-hidden transition-[scale,box-shadow,border-color] duration-(--duration-normal) ease-(--ease-out) motion-safe:hover:scale-[1.02]">
             {/* Brand hairline — the one place the gradient marks a surface as
                 "the" primary figure on the screen, rather than merely elevated.
                 The inner div sweeps a soft highlight across it every few
@@ -147,6 +141,10 @@ const BalanceCard = ({ balanceMinor, loading = false }) => {
              * These are the two reasons this product exists. They were
              * previously two entries in a six-item sidebar on desktop and
              * unreachable on mobile.
+             *
+             * Half the card each on a phone, where they are thumb targets.
+             * From `sm` up they size to their label (with a floor so the pair
+             * still matches) instead of stretching across a wide card.
              */}
             {overdrawn && (
                 <p className="mt-3 rounded-control bg-negative-soft px-3 py-2.5 text-xs leading-5 text-text-secondary">
@@ -156,10 +154,11 @@ const BalanceCard = ({ balanceMinor, loading = false }) => {
                 </p>
             )}
 
-            <div className="mt-5 grid grid-cols-2 gap-2">
+            <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:gap-3">
                 <Button
                     variant={overdrawn ? 'secondary' : 'primary'}
                     size="lg"
+                    className="sm:min-w-40"
                     icon={<Send size={17} />}
                     disabled={overdrawn}
                     onClick={() => navigate(ROUTES.SEND)}
@@ -169,6 +168,7 @@ const BalanceCard = ({ balanceMinor, loading = false }) => {
                 <Button
                     variant={overdrawn ? 'primary' : 'secondary'}
                     size="lg"
+                    className="sm:min-w-40"
                     icon={<Plus size={17} />}
                     onClick={() => navigate(ROUTES.ADD_MONEY)}
                 >

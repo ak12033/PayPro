@@ -47,7 +47,11 @@ export const ListRow = ({
 
     const content = (
         <>
-            {leading && <span className="shrink-0">{leading}</span>}
+            {leading && (
+                <span className="shrink-0">
+                    {leading}
+                </span>
+            )}
 
             <span className="min-w-0 flex-1 text-left">
                 <span className="flex items-baseline gap-2">
@@ -67,7 +71,11 @@ export const ListRow = ({
             )}
 
             {chevron && (
-                <ChevronRight size={16} className="shrink-0 text-text-muted" aria-hidden="true" />
+                <ChevronRight
+                    size={16}
+                    aria-hidden="true"
+                    className="shrink-0 text-text-muted transition-colors duration-(--duration-hover) ease-(--ease-out) group-hover:text-accent-text"
+                />
             )}
         </>
     );
@@ -77,8 +85,10 @@ export const ListRow = ({
         // 56px minimum: comfortably above the 44px touch target, and tall
         // enough for two lines of text without the row growing.
         'min-h-14',
+        // `group` lets the leading icon and the chevron answer the hover, so
+        // the row reads as one target rather than a tinted strip.
         interactive &&
-            'transition-colors duration-[--duration-fast] hover:bg-surface-hover active:bg-surface-active',
+            'group transition-colors duration-(--duration-fast) hover:bg-surface-hover active:bg-surface-active',
         className
     );
 

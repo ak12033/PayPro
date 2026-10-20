@@ -194,12 +194,12 @@ const TransactionDetailSheet = ({ transaction, open, onClose, onExplain, categor
                     icon={<CircleHelp size={16} />}
                     onClick={() => onExplain(transaction)}
                 >
-                    Explain this transaction
+                    Ask about this transaction
                 </Button>
             )}
 
             <p className="mt-4 text-center text-xs text-text-muted">
-                Something look wrong? Report it from Account → Security.
+                Something look wrong? Ask the assistant or contact support.
             </p>
         </Sheet>
     );

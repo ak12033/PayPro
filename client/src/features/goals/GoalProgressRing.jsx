@@ -42,7 +42,7 @@ const GoalProgressRing = ({ value, max, label }) => {
                     strokeDasharray={CIRCUMFERENCE}
                     strokeDashoffset={offset}
                     strokeLinecap="round"
-                    className="transition-[stroke-dashoffset] duration-[--duration-slow] ease-[--ease-out]"
+                    className="transition-[stroke-dashoffset] duration-(--duration-slow) ease-(--ease-out)"
                 />
             </svg>
             <span className="absolute text-xs font-semibold text-text" aria-hidden="true">

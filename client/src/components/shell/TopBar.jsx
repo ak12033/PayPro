@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bell, Moon, Sparkles, Sun } from 'lucide-react';
+import { Bell, Moon, Sun } from 'lucide-react';
+import LogoMark from '../ui/LogoMark';
 import cn from '../../lib/cn';
 import { IconButton } from '../ui/Button';
 import Avatar from '../ui/Avatar';
@@ -42,12 +43,7 @@ const TopBar = () => {
             {/* The wordmark only appears where the sidebar is hidden, so the
                 product name is never rendered twice on the same screen. */}
             <Link to={ROUTES.HOME} className="flex items-center gap-2 lg:hidden">
-                <span
-                    aria-hidden="true"
-                    className="grid h-7 w-7 place-items-center rounded-control bg-gradient-brand text-on-accent"
-                >
-                    <Sparkles size={15} />
-                </span>
+                <LogoMark size={28} />
                 <span className="text-sm font-semibold tracking-tight text-text">{APP_NAME}</span>
             </Link>
 
@@ -58,7 +54,12 @@ const TopBar = () => {
                 size="sm"
                 onClick={() => setTheme(isDark ? 'light' : 'dark')}
             >
-                {isDark ? <Sun size={18} /> : <Moon size={18} />}
+                {/* Keyed so the incoming icon remounts and turns into place. */}
+                {isDark ? (
+                    <Sun key="sun" size={18} className="animate-flip" />
+                ) : (
+                    <Moon key="moon" size={18} className="animate-flip" />
+                )}
             </IconButton>
 
             <div className="relative">
@@ -87,9 +88,12 @@ const TopBar = () => {
                      * this is purely the visual echo.
                      */
                     <span
+                        // Keyed on the count so a new notification pops the
+                        // badge once: one beat of motion, never a loop.
+                        key={unreadCount}
                         aria-hidden="true"
                         className={cn(
-                            'pointer-events-none absolute -right-0.5 -top-0.5',
+                            'pointer-events-none absolute -right-0.5 -top-0.5 animate-pop',
                             'grid min-w-4 place-items-center rounded-pill bg-danger px-1',
                             'text-[10px] font-semibold leading-4 text-on-danger'
                         )}
@@ -102,7 +106,7 @@ const TopBar = () => {
             <Link
                 to={ROUTES.ACCOUNT}
                 aria-current={pathname.startsWith(ROUTES.ACCOUNT) ? 'page' : undefined}
-                className="ml-1 rounded-full"
+                className="ml-1 rounded-full transition-shadow duration-(--duration-hover) ease-(--ease-out) hover:shadow-lift"
             >
                 <span className="sr-only">Account, signed in as {userName || 'your account'}</span>
                 <Avatar name={userName} size="sm" />

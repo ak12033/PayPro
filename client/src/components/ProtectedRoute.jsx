@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import FullScreenLoader from './feedback/FullScreenLoader';
 import { ROUTES } from '../constants/routes';
@@ -18,16 +18,14 @@ import { ROUTES } from '../constants/routes';
  */
 const ProtectedRoute = () => {
     const { isAuthenticated, isCheckingAuth } = useAuth();
-    const location = useLocation();
 
     if (isCheckingAuth) {
         return <FullScreenLoader message="Restoring your session…" />;
     }
 
     if (!isAuthenticated) {
-        // `state.from` lets the login page return the user to where they meant
-        // to go instead of always dumping them on the home screen.
-        return <Navigate to={ROUTES.LOGIN} replace state={{ from: location.pathname }} />;
+        // Signing in always lands on Home, so no return path is passed along.
+        return <Navigate to={ROUTES.LOGIN} replace />;
     }
 
     return <Outlet />;

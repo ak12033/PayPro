@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import cn from '../../lib/cn';
 
 /**
@@ -21,6 +21,40 @@ const SegmentedControl = ({
     className,
 }) => {
     const refs = useRef([]);
+    const listRef = useRef(null);
+    /**
+     * One raised pill that slides between options, rather than the old
+     * surface jumping from one segment to the next. Measured, not computed
+     * from an index, because segments are as wide as their labels.
+     * `null` until measured, and then each segment falls back to painting its
+     * own surface, so nothing is ever unmarked (jsdom, a failed measure).
+     */
+    const [indicator, setIndicator] = useState(null);
+    const selectedIndex = options.findIndex((option) => option.value === value);
+
+    useLayoutEffect(() => {
+        const list = listRef.current;
+        const node = refs.current[selectedIndex];
+        if (!list || !node) {
+            setIndicator(null);
+            return undefined;
+        }
+
+        const measure = () => {
+            if (!node.offsetWidth) return setIndicator(null);
+            setIndicator({ left: node.offsetLeft, width: node.offsetWidth });
+            return undefined;
+        };
+        measure();
+
+        // A label that changes width (a count arriving) or a container that
+        // reflows must carry the pill with it.
+        if (typeof ResizeObserver === 'undefined') return undefined;
+        const observer = new ResizeObserver(measure);
+        observer.observe(list);
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [selectedIndex, options.length]);
 
     const handleKeyDown = (event, index) => {
         const last = options.length - 1;
@@ -42,16 +76,27 @@ const SegmentedControl = ({
 
     return (
         <div
+            ref={listRef}
             role="tablist"
             aria-label={label}
             className={cn(
-                'inline-flex gap-1 rounded-control bg-surface-sunken p-1',
+                'relative inline-flex gap-1 rounded-control bg-surface-sunken p-1',
                 // Scrolls rather than wraps on narrow screens: a filter row that
                 // reflows to two lines pushes the content below it out of view.
                 'max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
                 className
             )}
         >
+            {indicator && (
+                <span
+                    aria-hidden="true"
+                    className={cn(
+                        'pointer-events-none absolute left-0 top-1 bottom-1 rounded-[calc(var(--radius-control)-2px)] bg-surface shadow-raised',
+                        'transition-[translate,width] duration-(--duration-normal) ease-(--ease-out)'
+                    )}
+                    style={{ width: indicator.width, translate: `${indicator.left}px 0` }}
+                />
+            )}
             {options.map((option, index) => {
                 const selected = option.value === value;
 
@@ -66,8 +111,9 @@ const SegmentedControl = ({
                         onClick={() => onChange(option.value)}
                         onKeyDown={(event) => handleKeyDown(event, index)}
                         className={cn(
-                            'shrink-0 rounded-[calc(var(--radius-control)-2px)] px-3 font-medium',
-                            'transition-colors duration-[--duration-fast] ease-[--ease-out]',
+                            // `relative` lifts the label above the sliding pill.
+                            'relative shrink-0 rounded-[calc(var(--radius-control)-2px)] px-3 font-medium',
+                            'transition-[color,background-color,scale] duration-(--duration-fast) ease-(--ease-out)',
                             height,
                             // The raised surface is what marks the selection;
                             // the accent text is what ties it to the rest of
@@ -75,8 +121,8 @@ const SegmentedControl = ({
                             // `aria-selected` and the elevation still carry it
                             // for anyone who cannot see the hue.
                             selected
-                                ? 'bg-surface text-accent-text shadow-raised'
-                                : 'text-text-muted hover:text-text'
+                                ? cn('text-accent-text', !indicator && 'bg-surface shadow-raised')
+                                : 'text-text-muted hover:bg-surface/50 hover:text-text'
                         )}
                     >
                         {option.label}

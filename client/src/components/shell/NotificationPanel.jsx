@@ -89,16 +89,18 @@ const NotificationPanel = ({ open, onClose }) => {
                     }
                 />
             ) : (
-                <ul className="space-y-1.5">
-                    {visible.map((item) => {
+                <ul className="stagger space-y-1.5">
+                    {visible.map((item, index) => {
                         const kind = getNotificationKind(item.type);
                         const Icon = kind.icon;
 
                         return (
-                            <li key={item._id}>
+                            // Capped so a long inbox finishes arriving quickly.
+                            <li key={item._id} style={{ '--stagger-index': Math.min(index, 8) }}>
                                 <div
                                     className={cn(
                                         'flex gap-3 rounded-card border p-3',
+                                        'transition-[background-color,border-color] duration-(--duration-fast) hover:border-border-strong',
                                         item.isRead
                                             ? 'border-transparent bg-transparent'
                                             : 'border-border bg-surface-sunken'
@@ -152,7 +154,7 @@ const NotificationPanel = ({ open, onClose }) => {
                                             type="button"
                                             onClick={() => markAsRead(item._id)}
                                             aria-label={`Mark "${item.title}" as read`}
-                                            className="h-8 w-8 shrink-0 rounded-control text-text-muted hover:bg-surface-hover hover:text-text"
+                                            className="h-8 w-8 shrink-0 rounded-control text-text-muted transition-colors duration-(--duration-hover) ease-(--ease-out) hover:bg-positive-soft hover:text-positive"
                                         >
                                             <Check size={15} className="mx-auto" />
                                         </button>

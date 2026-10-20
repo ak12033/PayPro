@@ -5,26 +5,25 @@ import { NotificationProvider } from './context/NotificationContext';
 import { SocketProvider } from './context/SocketContext';
 import { ThemeProvider } from './app/theme/ThemeProvider';
 import ErrorBoundary from './components/feedback/ErrorBoundary';
-import FullScreenLoader from './components/feedback/FullScreenLoader';
+import FullScreenLoader, { FullScreenLoaderHost } from './components/feedback/FullScreenLoader';
 import ProtectedRoute from './components/ProtectedRoute';
 import Toaster from './components/feedback/Toaster';
 import Landing from './pages/Landing';
 import SplashScreen from './pages/SplashScreen';
-import Login from './pages/auth/Login';
+import AuthPage from './pages/auth/AuthPage';
 import { LEGACY_REDIRECTS, ROUTES } from './constants/routes';
 
 /**
  * Route map.
  *
- * Only the landing page and the login form are eager. Everything else is
+ * Only the landing page and the login page are eager. Everything else is
  * code-split — the previous build shipped Recharts, the entire lucide icon set,
  * the Razorpay integration and every dashboard screen to a visitor who had not
  * signed in yet.
  *
- * Signup is lazy despite being a first-run screen: it is reached from a click,
- * so the chunk fetches while the user is still reading the landing page.
+ * There is no separate signup page: signup is a form inside the login page's
+ * dialog. `/signup` just redirects to the login page.
  */
-const Signup = lazy(() => import('./pages/auth/Signup'));
 const LoginVerify = lazy(() => import('./pages/auth/LoginVerify'));
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'));
@@ -73,106 +72,111 @@ const App = () => (
     <ErrorBoundary>
         <BrowserRouter>
             <ThemeProvider>
-                <AuthProvider>
-                    <NotificationProvider>
-                        <SocketProvider>
-                            <Toaster />
+                <FullScreenLoaderHost>
+                    <AuthProvider>
+                        <NotificationProvider>
+                            <SocketProvider>
+                                <Toaster />
 
-                            <Suspense fallback={<FullScreenLoader srLabel="Loading page" />}>
-                                <Routes>
-                                    {/* ------------------------------ public */}
-                                    <Route path={ROUTES.LANDING} element={<SplashScreen />} />
-                                    <Route path={ROUTES.WELCOME} element={<Landing />} />
-                                    <Route path={ROUTES.LOGIN} element={<Login />} />
-                                    <Route path={ROUTES.SIGNUP} element={<Signup />} />
-                                    <Route path={ROUTES.LOGIN_2FA} element={<LoginVerify />} />
-                                    <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
-                                    <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
-
-                                    {/* --------------------- authenticated */}
-                                    <Route element={<ProtectedRoute />}>
-                                        {/*
-                                         * Outside the shell: verification is a
-                                         * committed flow, so the navigation is
-                                         * removed to leave exactly one way
-                                         * forward and one way out.
-                                         */}
+                                <Suspense fallback={<FullScreenLoader srLabel="Loading page" />}>
+                                    <Routes>
+                                        {/* ------------------------------ public */}
+                                        <Route path={ROUTES.LANDING} element={<SplashScreen />} />
+                                        <Route path={ROUTES.WELCOME} element={<Landing />} />
+                                        <Route path={ROUTES.LOGIN} element={<AuthPage />} />
                                         <Route
-                                            path={ROUTES.TRANSFER_2FA}
-                                            element={<TransferVerify />}
+                                            path={ROUTES.SIGNUP}
+                                            element={<Navigate to={ROUTES.LOGIN} replace />}
                                         />
+                                        <Route path={ROUTES.LOGIN_2FA} element={<LoginVerify />} />
+                                        <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
+                                        <Route path={ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
 
-                                        <Route element={<AppShell />}>
-                                            <Route path={ROUTES.HOME} element={<Home />} />
-
-                                            <Route path={ROUTES.MONEY} element={<MoneyHub />} />
-                                            <Route path={ROUTES.SEND} element={<SendMoney />} />
-                                            <Route path={ROUTES.ADD_MONEY} element={<AddMoney />} />
-                                            <Route path={ROUTES.WITHDRAW} element={<Withdraw />} />
-
-                                            <Route path={ROUTES.ACTIVITY} element={<Activity />} />
+                                        {/* --------------------- authenticated */}
+                                        <Route element={<ProtectedRoute />}>
+                                            {/*
+                                             * Outside the shell: verification is a
+                                             * committed flow, so the navigation is
+                                             * removed to leave exactly one way
+                                             * forward and one way out.
+                                             */}
                                             <Route
-                                                path={ROUTES.ACTIVITY_MANUAL_ENTRY}
-                                                element={<RecordTransaction />}
+                                                path={ROUTES.TRANSFER_2FA}
+                                                element={<TransferVerify />}
                                             />
 
-                                            <Route path={ROUTES.INSIGHTS} element={<Insights />} />
-                                            <Route path={ROUTES.BUDGETS} element={<Budgets />} />
-                                            <Route path={ROUTES.GOALS} element={<Goals />} />
-                                            <Route path={ROUTES.BILLS} element={<Bills />} />
-                                            <Route path={ROUTES.TOOLS} element={<Tools />} />
-                                            <Route path={ROUTES.PORTFOLIO} element={<Portfolio />} />
-                                            <Route path={ROUTES.SUPPORT} element={<Support />} />
+                                            <Route element={<AppShell />}>
+                                                <Route path={ROUTES.HOME} element={<Home />} />
 
-                                            <Route path={ROUTES.ACCOUNT} element={<Account />} />
-                                            <Route path={ROUTES.SECURITY} element={<Security />} />
-                                            <Route path={ROUTES.VERIFICATION} element={<Verification />} />
+                                                <Route path={ROUTES.MONEY} element={<MoneyHub />} />
+                                                <Route path={ROUTES.SEND} element={<SendMoney />} />
+                                                <Route path={ROUTES.ADD_MONEY} element={<AddMoney />} />
+                                                <Route path={ROUTES.WITHDRAW} element={<Withdraw />} />
 
-                                            {/* ------------------- operations console */}
-                                            <Route element={<RequireRole />}>
-                                                <Route element={<AdminLayout />}>
-                                                    <Route path={ROUTES.ADMIN} element={<RequireRole capability="viewMetrics"><AdminOverview /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_RISK} element={<RequireRole capability="reviewRisk"><AdminRisk /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_SUPPORT} element={<RequireRole capability="workSupport"><AdminSupport /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_USERS} element={<RequireRole capability="viewUsers"><AdminUsers /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_TRANSACTIONS} element={<RequireRole capability="searchTransactions"><AdminTransactions /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_PAYMENTS} element={<RequireRole capability="viewPayments"><AdminPayments /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_RECONCILIATION} element={<RequireRole capability="viewReconciliation"><AdminReconciliation /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_WEBHOOKS} element={<RequireRole capability="viewWebhooks"><AdminWebhooks /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_AUDIT} element={<RequireRole capability="viewAuditLog"><AdminAudit /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_KYC} element={<RequireRole capability="reviewKyc"><AdminKyc /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_AML} element={<RequireRole capability="viewAml"><AdminAml /></RequireRole>} />
-                                                    <Route path={ROUTES.ADMIN_WITHDRAWALS} element={<RequireRole capability="processWithdrawals"><AdminWithdrawals /></RequireRole>} />
+                                                <Route path={ROUTES.ACTIVITY} element={<Activity />} />
+                                                <Route
+                                                    path={ROUTES.ACTIVITY_MANUAL_ENTRY}
+                                                    element={<RecordTransaction />}
+                                                />
+
+                                                <Route path={ROUTES.INSIGHTS} element={<Insights />} />
+                                                <Route path={ROUTES.BUDGETS} element={<Budgets />} />
+                                                <Route path={ROUTES.GOALS} element={<Goals />} />
+                                                <Route path={ROUTES.BILLS} element={<Bills />} />
+                                                <Route path={ROUTES.TOOLS} element={<Tools />} />
+                                                <Route path={ROUTES.PORTFOLIO} element={<Portfolio />} />
+                                                <Route path={ROUTES.SUPPORT} element={<Support />} />
+
+                                                <Route path={ROUTES.ACCOUNT} element={<Account />} />
+                                                <Route path={ROUTES.SECURITY} element={<Security />} />
+                                                <Route path={ROUTES.VERIFICATION} element={<Verification />} />
+
+                                                {/* ------------------- operations console */}
+                                                <Route element={<RequireRole />}>
+                                                    <Route element={<AdminLayout />}>
+                                                        <Route path={ROUTES.ADMIN} element={<RequireRole capability="viewMetrics"><AdminOverview /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_RISK} element={<RequireRole capability="reviewRisk"><AdminRisk /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_SUPPORT} element={<RequireRole capability="workSupport"><AdminSupport /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_USERS} element={<RequireRole capability="viewUsers"><AdminUsers /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_TRANSACTIONS} element={<RequireRole capability="searchTransactions"><AdminTransactions /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_PAYMENTS} element={<RequireRole capability="viewPayments"><AdminPayments /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_RECONCILIATION} element={<RequireRole capability="viewReconciliation"><AdminReconciliation /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_WEBHOOKS} element={<RequireRole capability="viewWebhooks"><AdminWebhooks /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_AUDIT} element={<RequireRole capability="viewAuditLog"><AdminAudit /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_KYC} element={<RequireRole capability="reviewKyc"><AdminKyc /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_AML} element={<RequireRole capability="viewAml"><AdminAml /></RequireRole>} />
+                                                        <Route path={ROUTES.ADMIN_WITHDRAWALS} element={<RequireRole capability="processWithdrawals"><AdminWithdrawals /></RequireRole>} />
+                                                    </Route>
                                                 </Route>
                                             </Route>
                                         </Route>
-                                    </Route>
 
-                                    {/*
-                                     * Pre-redesign paths.
-                                     *
-                                     * A bookmarked /dashboard, or a push
-                                     * notification linking to /payment-history,
-                                     * must not 404 because we reorganised the
-                                     * navigation. `replace` keeps the dead path
-                                     * out of the history stack, so Back does
-                                     * not bounce the user through the redirect
-                                     * again.
-                                     */}
-                                    {Object.entries(LEGACY_REDIRECTS).map(([from, to]) => (
-                                        <Route
-                                            key={from}
-                                            path={from}
-                                            element={<Navigate to={to} replace />}
-                                        />
-                                    ))}
+                                        {/*
+                                         * Pre-redesign paths.
+                                         *
+                                         * A bookmarked /dashboard, or a push
+                                         * notification linking to /payment-history,
+                                         * must not 404 because we reorganised the
+                                         * navigation. `replace` keeps the dead path
+                                         * out of the history stack, so Back does
+                                         * not bounce the user through the redirect
+                                         * again.
+                                         */}
+                                        {Object.entries(LEGACY_REDIRECTS).map(([from, to]) => (
+                                            <Route
+                                                key={from}
+                                                path={from}
+                                                element={<Navigate to={to} replace />}
+                                            />
+                                        ))}
 
-                                    <Route path={ROUTES.NOT_FOUND} element={<NotFound />} />
-                                </Routes>
-                            </Suspense>
-                        </SocketProvider>
-                    </NotificationProvider>
-                </AuthProvider>
+                                        <Route path={ROUTES.NOT_FOUND} element={<NotFound />} />
+                                    </Routes>
+                                </Suspense>
+                            </SocketProvider>
+                        </NotificationProvider>
+                    </AuthProvider>
+                </FullScreenLoaderHost>
             </ThemeProvider>
         </BrowserRouter>
     </ErrorBoundary>

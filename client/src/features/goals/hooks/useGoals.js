@@ -4,7 +4,7 @@ import { useSocket } from '../../../context/SocketContext';
 import { goalApi } from '../../../services/api/endpoints/goalApi';
 
 export const useGoals = (status = 'active') => {
-    const query = useQuery(async () => (await goalApi.list(status)).data?.goals ?? [], { deps: [status] });
+    const query = useQuery(async () => (await goalApi.list(status)).data?.goals ?? [], { deps: [status], key: `goals:${status ?? 'all'}` });
     const { subscribe } = useSocket() ?? {};
 
     useEffect(() => {

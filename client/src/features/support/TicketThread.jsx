@@ -76,6 +76,9 @@ const TicketThread = ({ open, onClose, ticket, loading, onReply, onCloseTicket, 
                             {TICKET_STATUS_LABEL[ticket.status]}
                         </Badge>
                         {ticket.priority === 'urgent' && <Badge tone="negative" size="sm">Urgent</Badge>}
+                        {ticket.origin?.channel === 'agent' && (
+                            <Badge tone="ai" size="sm">Raised via assistant</Badge>
+                        )}
                     </div>
 
                     <ul className="space-y-3">

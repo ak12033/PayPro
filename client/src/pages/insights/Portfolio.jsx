@@ -29,7 +29,7 @@ const Portfolio = () => {
             portfolioApi.summary(), portfolioApi.holdings(), portfolioApi.liabilities(),
         ]);
         return { summary: summary.data.summary, holdings: holdings.data.holdings, liabilities: liabilities.data.liabilities };
-    });
+    }, { key: 'portfolio' });
     const [sheet, setSheet] = useState(null); // { kind, entry }
     const [saving, setSaving] = useState(false);
 

@@ -2,12 +2,12 @@ import React from 'react';
 import { Wifi } from 'lucide-react';
 import cn from '../../lib/cn';
 import Amount from '../../components/ui/Amount';
-import { usePointerTilt } from '../../hooks/usePointerTilt';
 import { APP_NAME } from '../../constants/app';
 
 /**
  * A card-shaped presentation of the wallet, for screens about putting money
- * into it — chip, contactless icon, gradient faceplate, tilt-on-hover.
+ * into it — chip, contactless icon, gradient faceplate, a slight lift in
+ * size on hover.
  *
  * There is no card number, expiry or CVV anywhere in this component, and
  * that's deliberate rather than an omission: PayPro moves money through a
@@ -21,16 +21,13 @@ import { APP_NAME } from '../../constants/app';
  * semantic `text-*` tokens the rest of the product uses.
  */
 const WalletCard = ({ userName, balanceMinor, className }) => {
-    const { ref } = usePointerTilt({ maxDeg: 5 });
-
     return (
         <div
-            ref={ref}
             className={cn(
                 'relative flex min-h-[180px] flex-col justify-between overflow-hidden rounded-panel p-5',
                 'border border-white/10 shadow-raised',
                 'bg-gradient-to-br from-[var(--pp-slate-900)] via-[var(--pp-blue-900)] to-[var(--pp-slate-950)]',
-                'transition-transform duration-[--duration-fast] ease-[--ease-in-out]',
+                'transition-[scale,box-shadow] duration-(--duration-normal) ease-(--ease-out) motion-safe:hover:scale-[1.02] hover:shadow-lift-card',
                 className
             )}
         >

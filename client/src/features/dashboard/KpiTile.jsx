@@ -33,7 +33,7 @@ const KpiTile = ({
     return (
         <Card
             padding="md"
-            className="relative overflow-hidden transition-[transform,box-shadow] duration-[--duration-fast] ease-[--ease-out] hover:-translate-y-1 hover:shadow-raised"
+            className="relative overflow-hidden transition-[scale,box-shadow,border-color] duration-(--duration-normal) ease-(--ease-out) motion-safe:hover:scale-[1.02] hover:border-accent-border hover:shadow-lift-card"
         >
             <p className="text-xs text-text-muted">{label}</p>
 

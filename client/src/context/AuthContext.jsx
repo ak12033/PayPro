@@ -166,6 +166,32 @@ export const AuthProvider = ({ children }) => {
         };
     }, [fetchDashboardData, clearAuth]);
 
+    /**
+     * Load the profile for a session that started *after* mount.
+     *
+     * `initialise` above only covers the session restored on page load. Login,
+     * 2FA verification and signup just hand over a token via `setToken`, so
+     * without this the profile, balance and recent transactions stayed empty
+     * (and RequireRole waited on `user` forever) until the user reloaded.
+     *
+     * The ref keeps one load in flight: a silent token refresh while it runs
+     * changes `token` but must not start a second one.
+     */
+    const loadingProfileRef = useRef(false);
+    useEffect(() => {
+        if (isCheckingAuth || !token || user || loadingProfileRef.current) return;
+        loadingProfileRef.current = true;
+        fetchDashboardData()
+            .catch(() => {
+                // A 401 is already handled by the interceptor (refresh or
+                // sign-out); anything else leaves the screens on their empty
+                // state, the same as a failed load on page reload.
+            })
+            .finally(() => {
+                loadingProfileRef.current = false;
+            });
+    }, [isCheckingAuth, token, user, fetchDashboardData]);
+
     const logout = useCallback(async () => {
         /**
          * Detach this device from the account before ending the session.

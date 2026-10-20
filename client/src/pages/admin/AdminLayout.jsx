@@ -52,7 +52,7 @@ const AdminLayout = () => {
                                     aria-current={active ? 'page' : undefined}
                                     className={cn(
                                         'flex h-9 items-center gap-2 rounded-[calc(var(--radius-control)-2px)] px-3 text-sm font-medium',
-                                        'transition-colors duration-[--duration-fast]',
+                                        'transition-colors duration-(--duration-fast)',
                                         active
                                             ? 'bg-surface text-accent-text shadow-raised'
                                             : 'text-text-muted hover:text-text'

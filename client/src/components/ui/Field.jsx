@@ -76,7 +76,7 @@ export const Field = ({
 const CONTROL_BASE = cn(
     'w-full rounded-control border bg-surface text-text',
     'placeholder:text-text-muted',
-    'transition-[border-color,box-shadow] duration-[--duration-fast]',
+    'transition-[border-color,box-shadow] duration-(--duration-fast)',
     'disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-text-muted',
     // aria-invalid drives the error styling, so the visual state and the
     // accessible state cannot drift apart.
@@ -90,7 +90,13 @@ const CONTROL_BASE = cn(
     // Border only: the outline is the global one from index.css, and
     // `focus:outline-none` here is exactly the mistake that comment warns
     // about.
-    'focus:border-accent aria-[invalid=true]:focus:border-danger'
+    'focus:border-accent aria-[invalid=true]:focus:border-danger',
+    // The border firms up under the pointer, then a soft halo blooms around
+    // it on focus, so the field visibly reacts to a click as well as to Tab.
+    // Neither touches the outline. Hover yields to focus and to the error
+    // border, so it never hides either state.
+    'hover:not-focus:not-aria-[invalid=true]:border-border-strong',
+    'focus:shadow-[0_0_0_3px_var(--color-accent-soft)] aria-[invalid=true]:focus:shadow-[0_0_0_3px_var(--color-danger-soft)]'
 );
 
 /** Single-line text input. */
@@ -108,7 +114,9 @@ export const Input = React.forwardRef(function Input(
         <div
             className={cn(
                 'flex items-center rounded-control border border-border bg-surface',
-                'focus-within:border-accent',
+                'transition-[border-color,box-shadow] duration-(--duration-fast)',
+                'hover:not-focus-within:border-border-strong',
+                'focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-soft)]',
                 height,
                 className
             )}
@@ -160,8 +168,9 @@ export const AmountInput = React.forwardRef(function AmountInput(
         <div
             className={cn(
                 'flex items-center gap-1 rounded-card border border-border bg-surface px-4 py-4',
-                'focus-within:border-accent focus-within:shadow-raised',
-                'transition-[border-color,box-shadow] duration-[--duration-fast]',
+                'hover:not-focus-within:border-border-strong',
+                'focus-within:border-accent focus-within:shadow-[0_0_0_4px_var(--color-accent-soft)]',
+                'transition-[border-color,box-shadow] duration-(--duration-fast)',
                 className
             )}
         >

@@ -371,7 +371,7 @@ const SendMoney = () => {
                                 onClick={() => setAmount(String(preset))}
                                 className={cn(
                                     'h-9 rounded-pill border px-4 text-sm font-medium',
-                                    'transition-colors duration-[--duration-fast]',
+                                    'transition-colors duration-(--duration-fast)',
                                     amount === String(preset)
                                         ? 'border-accent bg-accent-soft text-accent-text'
                                         : 'border-border text-text-secondary hover:bg-surface-hover'
@@ -505,7 +505,7 @@ const StepIndicator = ({ step }) => {
                         <span
                             aria-current={state === 'current' ? 'step' : undefined}
                             className={cn(
-                                'h-1 flex-1 rounded-pill transition-colors duration-[--duration-normal]',
+                                'h-1 flex-1 rounded-pill transition-colors duration-(--duration-normal)',
                                 state === 'upcoming' ? 'bg-border' : 'bg-accent'
                             )}
                         />

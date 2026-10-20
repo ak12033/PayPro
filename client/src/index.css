@@ -31,6 +31,37 @@
         text-rendering: optimizeLegibility;
     }
 
+    /* In-page jumps (skip links, "back to top") glide instead of cutting.
+       The reduced-motion block at the end of this file turns it off again. */
+    html {
+        scroll-behavior: smooth;
+    }
+
+    /* Tailwind v4 dropped `cursor: pointer` from buttons, so every button,
+       segmented control and toggle in the product showed the text arrow.
+       One rule restores the hand on anything clickable, and a disabled
+       control says so with the cursor as well as the dimming. */
+    button,
+    [role='button'],
+    [role='tab'],
+    [role='switch'],
+    [role='menuitem'],
+    [role='option'],
+    a[href],
+    summary,
+    label[for],
+    select,
+    input[type='checkbox'],
+    input[type='radio'],
+    input[type='range'] {
+        cursor: pointer;
+    }
+
+    :disabled,
+    [aria-disabled='true'] {
+        cursor: not-allowed;
+    }
+
     /**
      * One focus treatment for the entire product.
      *
@@ -94,6 +125,35 @@
         100% { transform: scale(1); opacity: 1; }
     }
 
+    /* Dialog arrival: grows out of a slightly smaller, lower box with no
+       overshoot. `pp-pop`'s overshoot is a confirmation flourish; on a panel
+       full of form fields it reads as the dialog wobbling. */
+    @keyframes pp-dialog-in {
+        from { opacity: 0; transform: translateY(6px) scale(0.96); }
+        to { opacity: 1; transform: none; }
+    }
+
+    /* Content arrival: a longer travel than `pp-rise`, for whole sections of
+       a page rather than single rows. Ends on `none`, never `translateY(0)`:
+       a retained transform would make every section a containing block for
+       its fixed and sticky descendants. */
+    @keyframes pp-fade-up {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: none; }
+    }
+
+    /* An icon that has just swapped for its opposite (theme toggle). */
+    @keyframes pp-flip {
+        from { opacity: 0; transform: rotate(-120deg) scale(0.6); }
+        to { opacity: 1; transform: none; }
+    }
+
+    /* A popover or menu dropping out of its trigger. */
+    @keyframes pp-menu-in {
+        from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+        to { opacity: 1; transform: none; }
+    }
+
     @keyframes pp-shimmer {
         from { background-position: 200% 0; }
         to { background-position: -200% 0; }
@@ -142,6 +202,10 @@
     .animate-rise { animation: pp-rise var(--duration-normal) var(--ease-out) both; }
     .animate-sheet-up { animation: pp-sheet-up var(--duration-slow) var(--ease-out) both; }
     .animate-pop { animation: pp-pop var(--duration-slow) var(--ease-spring) both; }
+    .animate-dialog { animation: pp-dialog-in 260ms var(--ease-out) both; }
+    .animate-fade-up { animation: pp-fade-up 450ms var(--ease-out) both; }
+    .animate-flip { animation: pp-flip 360ms var(--ease-out) both; }
+    .animate-menu { animation: pp-menu-in 180ms var(--ease-out) both; transform-origin: top right; }
     /* Mostly-idle cycle (the sweep occupies ~30% of it) rather than
        back-to-back: this card is on screen on every dashboard load, so a
        constant sweep would feel restless under a number someone is reading. */
@@ -154,16 +218,6 @@
        not something accelerating in and out. */
     .animate-loader-orbit { animation: pp-loader-orbit 7s linear infinite; }
 
-    /* SplashScreen's indeterminate progress bar: a segment sliding across
-       the track while it widens and narrows. */
-    @keyframes pp-splash-progress {
-        0%   { transform: translateX(-120%); width: 30%; }
-        50%  { transform: translateX(110%); width: 40%; }
-        100% { transform: translateX(320%); width: 30%; }
-    }
-
-    .animate-splash-progress { animation: pp-splash-progress 1.4s var(--ease-in-out) infinite; }
-
     /* Staggers a list without a JS animation library: each row reads its own
        index off a CSS variable set inline. */
     .stagger > * {
@@ -171,21 +225,22 @@
         animation-delay: calc(var(--stagger-index, 0) * 40ms);
     }
 
-    /* Magnetic pull for primary buttons. JS never writes `transform` directly
-       — it only sets `--magnet-x`/`--magnet-y`/`--magnet-scale` — so this
-       stays the single source of truth for the button's transform and can't
-       be silently overridden by an inline style on `:active`.
-       Deliberately does NOT declare its own `transition`: Button already
-       transitions `transform` (among other properties) via its own Tailwind
-       classes, and a second `transition` shorthand here would compete with
-       that one for the same CSS property, with the winner depending on
-       cascade/layer order rather than anything explicit. */
-    .btn-magnetic {
-        transform: translate(var(--magnet-x, 0px), var(--magnet-y, 0px)) scale(var(--magnet-scale, 1));
+    /* Page entrance. AppShell puts this on the wrapper around <Outlet>, and
+       most pages render a fragment of sections, so each top-level section
+       fades up one beat after the one above it, without a page having to
+       number its own children. Capped at the eighth: a long page should
+       finish arriving in under half a second, not trickle in. */
+    .page-enter > * {
+        animation: pp-fade-up 450ms var(--ease-out) both;
+        animation-delay: 280ms;
     }
-    .btn-magnetic:active {
-        --magnet-scale: 0.98;
-    }
+    .page-enter > :nth-child(1) { animation-delay: 0ms; }
+    .page-enter > :nth-child(2) { animation-delay: 40ms; }
+    .page-enter > :nth-child(3) { animation-delay: 80ms; }
+    .page-enter > :nth-child(4) { animation-delay: 120ms; }
+    .page-enter > :nth-child(5) { animation-delay: 160ms; }
+    .page-enter > :nth-child(6) { animation-delay: 200ms; }
+    .page-enter > :nth-child(7) { animation-delay: 240ms; }
 
     /* Skeletons sweep rather than pulse. A pulsing block reads as an error
        indicator; a sweep reads as "in progress". */
@@ -215,6 +270,7 @@
         -webkit-background-clip: text;
         color: transparent;
     }
+
 }
 
 /**

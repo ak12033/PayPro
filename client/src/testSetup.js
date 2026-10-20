@@ -14,8 +14,8 @@ import { cleanup } from '@testing-library/react';
 afterEach(cleanup);
 
 /**
- * jsdom has no `window.matchMedia`, and `Button`, `usePointerTilt` and the
- * theme all call it on mount to decide whether to animate. Answering "no" to
+ * jsdom has no `window.matchMedia`, and the theme and the decorative
+ * canvases call it on mount to decide whether to animate. Answering "no" to
  * every query is the conservative environment: no hover, no reduced-motion
  * preference, light scheme — so a component renders its plain, static form.
  * Before any test rendered a primary Button this gap was never hit.

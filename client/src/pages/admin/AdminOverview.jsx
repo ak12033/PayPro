@@ -27,14 +27,14 @@ const AdminOverview = () => {
     const { user } = useAuth();
     const role = user?.role;
 
-    const metrics = useQuery(async () => (await adminApi.getMetrics()).data);
+    const metrics = useQuery(async () => (await adminApi.getMetrics()).data, { key: 'admin:metrics' });
     const risk = useQuery(
         async () => (await adminApi.listRiskCases({ status: 'open' })).data,
-        { enabled: can(role, 'reviewRisk') }
+        { enabled: can(role, 'reviewRisk'), key: 'admin:risk:open' }
     );
     const support = useQuery(
         async () => (await adminApi.listTickets({ status: 'open' })).data,
-        { enabled: can(role, 'workSupport') }
+        { enabled: can(role, 'workSupport'), key: 'admin:tickets:open' }
     );
 
     const m = metrics.data;

@@ -3,6 +3,6 @@ import { analyticsApi } from '../../../services/api/endpoints/analyticsApi';
 
 /** Payment settlement outcomes (captured/pending/failed/refunded) and the success-rate trend. */
 export const usePaymentsStatus = (range) =>
-    useQuery(async () => (await analyticsApi.getPaymentsStatus(range)).data, { deps: [range] });
+    useQuery(async () => (await analyticsApi.getPaymentsStatus(range)).data, { deps: [range], key: `dashboard:payments:${range}` });
 
 export default usePaymentsStatus;

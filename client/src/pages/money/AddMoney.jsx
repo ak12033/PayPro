@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Lock } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { CheckCircle2, LifeBuoy, Lock } from 'lucide-react';
 import PageHeader from '../../components/layout/PageHeader';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
@@ -12,8 +12,10 @@ import WalletCard from '../../features/wallet/WalletCard';
 import VerifyEmailBanner from '../../features/account/VerifyEmailBanner';
 import VerifyEmailSheet from '../../features/account/VerifyEmailSheet';
 import { useAuth } from '../../context/AuthContext';
+import { useAssistant } from '../../context/useAssistant';
 import { paymentApi } from '../../services/api/endpoints/paymentApi';
 import { getErrorMessage } from '../../utils/errors';
+import { parseAmountParam } from '../../utils/validation';
 import { formatCurrency, formatCurrencyCompact } from '../../utils/formatters';
 import { loadExternalScript } from '../../lib/loadExternalScript';
 import { env } from '../../app/config/env';
@@ -48,12 +50,20 @@ import cn from '../../lib/cn';
  *   `type="number"` on the amount field, which attached a scroll-wheel handler
  *   — scrolling the page with the cursor over the input silently changed how
  *   much was about to be charged.
+ *
+ * Two additions for the assistant (plan.md §40.4), neither touching the
+ * Razorpay calls: `?amount=` prefills the field (never submits it), and a
+ * failed or unconfirmed payment offers "Get help with this payment", which
+ * opens the assistant about this order — hence the order id kept in state.
  */
 const AddMoney = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const { userName, balance, balanceMinor, fetchDashboardData } = useAuth();
+    const assistant = useAssistant();
 
-    const [amount, setAmount] = useState('');
+    const [amount, setAmount] = useState(() => parseAmountParam(searchParams.get('amount')));
+    const [orderId, setOrderId] = useState(null);
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState(null); // { status, amount, message }
     const [verifyOpen, setVerifyOpen] = useState(false);
@@ -73,6 +83,7 @@ const AddMoney = () => {
 
         setLoading(true);
         setResult(null);
+        setOrderId(null);
 
         try {
             const loaded = await loadExternalScript(RAZORPAY_CHECKOUT_URL);
@@ -94,6 +105,7 @@ const AddMoney = () => {
                 });
                 return;
             }
+            setOrderId(order.orderId ?? null);
 
             const checkout = new window.Razorpay({
                 key: env.razorpayKeyId,
@@ -244,7 +256,7 @@ const AddMoney = () => {
                             onClick={() => setAmount(String(preset))}
                             className={cn(
                                 'h-9 rounded-pill border px-4 text-sm font-medium',
-                                'transition-colors duration-[--duration-fast]',
+                                'transition-colors duration-(--duration-fast)',
                                 amount === String(preset)
                                     ? 'border-accent bg-accent-soft text-accent-text'
                                     : 'border-border text-text-secondary hover:bg-surface-hover'
@@ -303,6 +315,22 @@ const AddMoney = () => {
                             </p>
                         )}
                     </Card>
+                )}
+
+                {(result?.status === 'error' || result?.status === 'pending') && assistant.available && (
+                    <Button
+                        variant="ai"
+                        fullWidth
+                        icon={<LifeBuoy size={16} />}
+                        onClick={() =>
+                            assistant.openAssistant({
+                                prompt: "My top-up didn't go through",
+                                ...(orderId && { resource: { type: 'payment', id: orderId } }),
+                            })
+                        }
+                    >
+                        Get help with this payment
+                    </Button>
                 )}
 
                 <Button

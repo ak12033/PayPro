@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import cn from '../../lib/cn';
 import { PRIMARY_NAV, isNavItemActive } from '../../app/navigation';
+import { prefetchProps } from '../../app/routePrefetch';
 
 /**
  * Mobile primary navigation.
@@ -36,24 +37,30 @@ const TabBar = () => {
                         <li key={item.to} className="flex-1">
                             <Link
                                 to={item.to}
+                                {...prefetchProps(item.to)}
                                 aria-current={active ? 'page' : undefined}
                                 className={cn(
-                                    'flex min-h-14 flex-col items-center justify-center gap-1 px-1 pt-2',
-                                    'transition-colors duration-[--duration-fast]',
+                                    'group flex min-h-14 flex-col items-center justify-center gap-1 px-1 pt-2',
+                                    'transition-colors duration-(--duration-fast)',
                                     active ? 'text-accent-text' : 'text-text-muted'
                                 )}
                             >
                                 {/* The active pill sits behind the icon rather than
                                     recolouring the label alone, so the current tab is
                                     distinguishable without relying on hue. */}
-                                <span
-                                    className={cn(
-                                        'grid h-7 w-12 place-items-center rounded-pill',
-                                        'transition-colors duration-[--duration-fast]',
-                                        active && 'bg-accent-soft'
-                                    )}
-                                >
-                                    <Icon size={20} strokeWidth={active ? 2.4 : 2} aria-hidden="true" />
+                                <span className="relative grid h-7 w-12 place-items-center">
+                                    {/* The pill is always mounted and grows out of
+                                        the icon's centre when the tab becomes
+                                        current, rather than popping in. */}
+                                    <span
+                                        aria-hidden="true"
+                                        className={cn(
+                                            'absolute inset-0 rounded-pill bg-accent-soft',
+                                            'transition-[scale,opacity] duration-(--duration-normal) ease-(--ease-out)',
+                                            active ? 'scale-100 opacity-100' : 'scale-x-50 opacity-0'
+                                        )}
+                                    />
+                                    <Icon size={20} strokeWidth={active ? 2.4 : 2} aria-hidden="true" className="relative" />
                                 </span>
                                 <span className="text-2xs font-medium tracking-normal">
                                     {item.label}

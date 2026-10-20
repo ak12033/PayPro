@@ -1,5 +1,6 @@
 import React from 'react';
-import { Sparkles, TrendingUp, PiggyBank, AlertTriangle, FileText, Calculator } from 'lucide-react';
+import { TrendingUp, PiggyBank, AlertTriangle, FileText, Calculator } from 'lucide-react';
+import LogoMark from '../../components/ui/LogoMark';
 import cn from '../../lib/cn';
 import Card from '../../components/ui/Card';
 
@@ -70,7 +71,7 @@ const InsightCard = ({ insight, compact = false }) => {
                         <h3 className="text-sm font-semibold text-text">{insight.title}</h3>
                         {isAi && (
                             <span className="inline-flex items-center gap-1 rounded-pill bg-ai-soft px-1.5 py-0.5 text-2xs font-medium text-ai">
-                                <Sparkles size={10} aria-hidden="true" />
+                                <LogoMark size={10} aria-hidden="true" />
                                 AI
                             </span>
                         )}

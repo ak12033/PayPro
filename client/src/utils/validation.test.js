@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isNonEmpty, isPositiveAmount, toAmount, isCompleteOtp, digitsOnly, isValidEmail } from './validation';
+import { isNonEmpty, isPositiveAmount, toAmount, isCompleteOtp, digitsOnly, isValidEmail, parseAmountParam } from './validation';
 
 describe('isNonEmpty', () => {
     it('rejects whitespace-only input', () => {
@@ -66,4 +66,23 @@ describe('isValidEmail', () => {
     ])('for %s returns %s', (_label, value, expected) => {
         expect(isValidEmail(value)).toBe(expected);
     });
+});
+
+describe('parseAmountParam — the AddMoney ?amount= prefill (plan.md §40.4)', () => {
+    it.each([
+        ['500', '500'],
+        ['500.5', '500.5'],
+        ['500.50', '500.5'],
+        [' 1000 ', '1000'],
+        ['0.01', '0.01'],
+    ])('accepts %j as %j', (input, expected) => {
+        expect(parseAmountParam(input)).toBe(expected);
+    });
+
+    it.each([null, undefined, '', '0', '0.00', '-5', '1e3', '0x10', '500abc', '5.123', '12345678', 'Infinity', '500,00'])(
+        'ignores %j',
+        (input) => {
+            expect(parseAmountParam(input)).toBe('');
+        }
+    );
 });

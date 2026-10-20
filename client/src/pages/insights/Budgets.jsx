@@ -22,7 +22,7 @@ import { getErrorMessage } from '../../utils/errors';
  */
 const Budgets = () => {
     const { data, loading, error, retry, refresh } = useBudget();
-    const history = useQuery(async () => (await budgetApi.getHistory()).data?.entries ?? []);
+    const history = useQuery(async () => (await budgetApi.getHistory()).data?.entries ?? [], { key: 'budget:history' });
 
     const [editorOpen, setEditorOpen] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);

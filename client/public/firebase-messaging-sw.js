@@ -47,8 +47,8 @@ try {
 
         return self.registration.showNotification(data.title || 'PayPro', {
             body: data.body || '',
-            icon: '/Icon.jpg',
-            badge: '/Icon.jpg',
+            icon: '/logo-mark-192.png',
+            badge: '/logo-mark-192.png',
             /**
              * Tagged per notification id so a retried delivery replaces the
              * notification instead of stacking a duplicate underneath it,

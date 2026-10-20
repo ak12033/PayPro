@@ -76,7 +76,7 @@ const OtpField = ({
                                 key={index}
                                 className={cn(
                                     'flex h-14 flex-1 items-center justify-center rounded-control border text-xl font-semibold',
-                                    'transition-[color,background-color,border-color,box-shadow] duration-[--duration-fast]',
+                                    'transition-[color,background-color,border-color,box-shadow] duration-(--duration-fast)',
                                     error
                                         ? 'border-danger bg-danger-soft text-danger'
                                         : active

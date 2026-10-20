@@ -133,7 +133,10 @@ const Sheet = ({
                     // Rounded top only on mobile, where it reads as a sheet
                     // rising from the bottom edge.
                     'max-h-[92dvh] rounded-t-panel sm:max-h-[85dvh] sm:rounded-panel',
-                    'animate-sheet-up sm:animate-pop',
+                    // Rises from the edge on mobile; on desktop it grows out
+                    // of a slightly smaller box with no overshoot, since a
+                    // springy bounce on a form full of fields reads as wobble.
+                    'animate-sheet-up sm:animate-dialog',
                     width,
                     className
                 )}
@@ -211,7 +214,7 @@ export const ConfirmSheet = ({
                     type="button"
                     onClick={onClose}
                     disabled={loading}
-                    className="h-11 rounded-control px-4 text-sm font-medium text-text-secondary hover:bg-surface-hover disabled:opacity-45"
+                    className="h-11 rounded-control px-4 text-sm font-medium text-text-secondary transition-colors duration-(--duration-hover) ease-(--ease-out) hover:bg-surface-hover disabled:opacity-45"
                 >
                     {cancelLabel}
                 </button>
@@ -230,8 +233,8 @@ export const ConfirmSheet = ({
 const ConfirmButton = ({ variant, loading, onClick, children }) => {
     const tone =
         variant === 'danger'
-            ? 'bg-danger text-on-danger shadow-raised hover:opacity-90'
-            : 'bg-gradient-brand text-on-accent shadow-glow-accent hover:brightness-110';
+            ? 'bg-danger text-on-danger shadow-raised hover:opacity-90 hover:shadow-lift'
+            : 'bg-gradient-brand text-on-accent shadow-glow-accent hover:brightness-110 hover:shadow-glow-accent-hover';
 
     return (
         <button
@@ -240,7 +243,9 @@ const ConfirmButton = ({ variant, loading, onClick, children }) => {
             disabled={loading}
             aria-busy={loading || undefined}
             className={cn(
-                'h-11 rounded-control px-5 text-sm font-medium disabled:opacity-45',
+                'h-11 rounded-control px-5 text-sm font-medium disabled:pointer-events-none disabled:opacity-45',
+                // Same lift-and-press as Button's primary and danger intents.
+                'transition-[opacity,box-shadow,filter,translate,scale] duration-(--duration-hover) ease-(--ease-out)',
                 tone
             )}
         >

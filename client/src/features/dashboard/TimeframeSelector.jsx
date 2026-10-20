@@ -26,7 +26,7 @@ const TimeframeSelector = ({ value, onChange, className }) => (
                 aria-pressed={value === option.value}
                 className={cn(
                     'rounded-[calc(var(--radius-control)-4px)] px-2.5 py-1.5 text-xs font-semibold',
-                    'transition-colors duration-[--duration-fast] ease-[--ease-out]',
+                    'transition-colors duration-(--duration-fast) ease-(--ease-out)',
                     // Matches SegmentedControl's selected treatment exactly —
                     // the two sit on the same screen and reading as two
                     // different controls was the old inconsistency.
