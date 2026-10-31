@@ -5,7 +5,7 @@ import LogoMark from '../ui/LogoMark';
 import cn from '../../lib/cn';
 import { IconButton } from '../ui/Button';
 import Avatar from '../ui/Avatar';
-import { ROUTES } from '../../constants/routes';
+import { ROUTES, HOME_ROUTE } from '../../constants/routes';
 import { APP_NAME } from '../../constants/app';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
@@ -42,7 +42,7 @@ const TopBar = () => {
         >
             {/* The wordmark only appears where the sidebar is hidden, so the
                 product name is never rendered twice on the same screen. */}
-            <Link to={ROUTES.HOME} className="flex items-center gap-2 lg:hidden">
+            <Link to={HOME_ROUTE} className="flex items-center gap-2 lg:hidden">
                 <LogoMark size={28} />
                 <span className="text-sm font-semibold tracking-tight text-text">{APP_NAME}</span>
             </Link>

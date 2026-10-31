@@ -32,7 +32,10 @@ const fromHistory = (stored) =>
 export const useAgentConversation = ({ enabled, context, onDisabled }) => {
     const [conversationId, setConversationId] = useState(null);
     const [messages, setMessages] = useState([]);
-    const [loading, setLoading] = useState(false);
+    // Loading from the first render when enabled: otherwise a caller waiting
+    // for history (AgentChat's initial prompt) sees `false` before the fetch
+    // starts, sends, and the arriving history then replaces its bubble.
+    const [loading, setLoading] = useState(Boolean(enabled));
     const [sending, setSending] = useState(false);
     const [executing, setExecuting] = useState(null);
     const [unavailable, setUnavailable] = useState(false);

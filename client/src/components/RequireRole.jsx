@@ -7,7 +7,7 @@ import Button from './ui/Button';
 import EmptyState from './feedback/EmptyState';
 import FullScreenLoader from './feedback/FullScreenLoader';
 import { can, isStaff } from '../constants/admin';
-import { ROUTES } from '../constants/routes';
+import { HOME_ROUTE } from '../constants/routes';
 
 /**
  * Role gate for the operations console (plan.md §28.4).
@@ -35,7 +35,7 @@ const RequireRole = ({ capability, children }) => {
     const role = user.role ?? 'user';
 
     if (!isStaff(role)) {
-        return <Navigate to={ROUTES.HOME} replace />;
+        return <Navigate to={HOME_ROUTE} replace />;
     }
 
     if (capability && !can(role, capability)) {

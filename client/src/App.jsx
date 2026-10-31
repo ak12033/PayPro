@@ -11,7 +11,11 @@ import Toaster from './components/feedback/Toaster';
 import Landing from './pages/Landing';
 import SplashScreen from './pages/SplashScreen';
 import AuthPage from './pages/auth/AuthPage';
-import { LEGACY_REDIRECTS, ROUTES } from './constants/routes';
+import { HOME_ROUTE, LEGACY_REDIRECTS, ROUTES, WALLET_ROUTES } from './constants/routes';
+import { env } from './app/config/env';
+
+/** Consumer-wallet freeze (DEC-02). The API's CONSUMER_WALLET_ENABLED is what refuses the routes. */
+const WALLET_ON = env.consumerWalletEnabled;
 
 /**
  * Route map.
@@ -100,36 +104,47 @@ const App = () => (
                                              * removed to leave exactly one way
                                              * forward and one way out.
                                              */}
-                                            <Route
-                                                path={ROUTES.TRANSFER_2FA}
-                                                element={<TransferVerify />}
-                                            />
+                                            {WALLET_ON && (
+                                                <Route
+                                                    path={ROUTES.TRANSFER_2FA}
+                                                    element={<TransferVerify />}
+                                                />
+                                            )}
 
                                             <Route element={<AppShell />}>
-                                                <Route path={ROUTES.HOME} element={<Home />} />
+                                                {/*
+                                                 * The consumer wallet (DEC-02, CAP-LEG-1).
+                                                 * Frozen, every path below redirects to
+                                                 * HOME_ROUTE instead; see WALLET_ROUTES.
+                                                 */}
+                                                {WALLET_ON && (
+                                                    <>
+                                                        <Route path={ROUTES.HOME} element={<Home />} />
 
-                                                <Route path={ROUTES.MONEY} element={<MoneyHub />} />
-                                                <Route path={ROUTES.SEND} element={<SendMoney />} />
-                                                <Route path={ROUTES.ADD_MONEY} element={<AddMoney />} />
-                                                <Route path={ROUTES.WITHDRAW} element={<Withdraw />} />
+                                                        <Route path={ROUTES.MONEY} element={<MoneyHub />} />
+                                                        <Route path={ROUTES.SEND} element={<SendMoney />} />
+                                                        <Route path={ROUTES.ADD_MONEY} element={<AddMoney />} />
+                                                        <Route path={ROUTES.WITHDRAW} element={<Withdraw />} />
 
-                                                <Route path={ROUTES.ACTIVITY} element={<Activity />} />
-                                                <Route
-                                                    path={ROUTES.ACTIVITY_MANUAL_ENTRY}
-                                                    element={<RecordTransaction />}
-                                                />
+                                                        <Route path={ROUTES.ACTIVITY} element={<Activity />} />
+                                                        <Route
+                                                            path={ROUTES.ACTIVITY_MANUAL_ENTRY}
+                                                            element={<RecordTransaction />}
+                                                        />
 
-                                                <Route path={ROUTES.INSIGHTS} element={<Insights />} />
-                                                <Route path={ROUTES.BUDGETS} element={<Budgets />} />
-                                                <Route path={ROUTES.GOALS} element={<Goals />} />
-                                                <Route path={ROUTES.BILLS} element={<Bills />} />
-                                                <Route path={ROUTES.TOOLS} element={<Tools />} />
-                                                <Route path={ROUTES.PORTFOLIO} element={<Portfolio />} />
+                                                        <Route path={ROUTES.INSIGHTS} element={<Insights />} />
+                                                        <Route path={ROUTES.BUDGETS} element={<Budgets />} />
+                                                        <Route path={ROUTES.GOALS} element={<Goals />} />
+                                                        <Route path={ROUTES.BILLS} element={<Bills />} />
+                                                        <Route path={ROUTES.TOOLS} element={<Tools />} />
+                                                        <Route path={ROUTES.PORTFOLIO} element={<Portfolio />} />
+                                                        <Route path={ROUTES.VERIFICATION} element={<Verification />} />
+                                                    </>
+                                                )}
                                                 <Route path={ROUTES.SUPPORT} element={<Support />} />
 
                                                 <Route path={ROUTES.ACCOUNT} element={<Account />} />
                                                 <Route path={ROUTES.SECURITY} element={<Security />} />
-                                                <Route path={ROUTES.VERIFICATION} element={<Verification />} />
 
                                                 {/* ------------------- operations console */}
                                                 <Route element={<RequireRole />}>
@@ -149,6 +164,10 @@ const App = () => (
                                                     </Route>
                                                 </Route>
                                             </Route>
+
+                                            {!WALLET_ON && WALLET_ROUTES.map((path) => (
+                                                <Route key={path} path={path} element={<Navigate to={HOME_ROUTE} replace />} />
+                                            ))}
                                         </Route>
 
                                         {/*

@@ -8,7 +8,9 @@ import Badge from '../../components/ui/Badge';
 import Amount from '../../components/ui/Amount';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import { ConfirmSheet } from '../../components/ui/Sheet';
+import Field, { Input } from '../../components/ui/Field';
 import { SkeletonRows } from '../../components/ui/Skeleton';
+import ReauthSheet from '../../features/admin/ReauthSheet';
 import EmptyState from '../../components/feedback/EmptyState';
 import ErrorState from '../../components/feedback/ErrorState';
 import ResponsiveTable, { Pager } from '../../features/admin/ResponsiveTable';
@@ -32,6 +34,9 @@ const FILTERS = [
 /** A captured order that never credited is the one state here where a customer has paid and has nothing. */
 const isUncredited = (payment) => payment.status === 'captured' && !payment.walletCredited;
 
+/** Only a credited, not-yet-refunded top-up can go back to its card. */
+const isRefundable = (payment) => payment.status === 'captured' && payment.walletCredited && !payment.walletDebitedOnRefund;
+
 /**
  * Gateway payments (plan.md §28.2 "Payments").
  *
@@ -45,6 +50,10 @@ const isUncredited = (payment) => payment.status === 'captured' && !payment.wall
  * pay twice. It is offered for any uncredited order, not just "captured" ones,
  * because a lost webhook leaves the row saying `created` even after the
  * customer paid.
+ *
+ * Refund (DEF-01) is admin-only, re-authenticated and needs a written reason.
+ * The server takes the money out of the wallet before asking Razorpay, so a
+ * top-up the customer has already spent is refused and the card is untouched.
  */
 const AdminPayments = () => {
     const { user } = useAuth();
@@ -67,6 +76,32 @@ const AdminPayments = () => {
     );
     const rows = payments.data?.payments ?? [];
     const canResettle = can(user?.role, 'resettlePayments');
+    const canRefund = can(user?.role, 'refundPayments');
+    const [refundTarget, setRefundTarget] = useState(null);
+    const [refundReason, setRefundReason] = useState('');
+
+    const refund = async (currentPassword) => {
+        if (refundReason.trim().length < 10) {
+            toast.error('Write a reason of at least 10 characters — it goes to the audit log.');
+            return;
+        }
+        setWorking(true);
+        try {
+            const { data } = await adminApi.refundPayment(refundTarget.orderId, { reason: refundReason.trim(), currentPassword });
+            toast.success(data.message);
+            setRefundTarget(null);
+            setRefundReason('');
+            payments.refresh();
+        } catch (err) {
+            toast.error(getErrorMessage(err, 'The refund was not issued.'));
+        } finally {
+            setWorking(false);
+        }
+    };
+
+    const actionFor = (row) => (isRefundable(row)
+        ? (canRefund ? <RowAction label="Refund" onClick={() => setRefundTarget(row)} /> : null)
+        : (canResettle && !row.walletCredited ? <RowAction label="Re-settle" onClick={() => setTarget(row)} /> : null));
 
     const resettle = async () => {
         setWorking(true);
@@ -137,19 +172,18 @@ const AdminPayments = () => {
                                 },
                                 { key: 'amount', header: 'Amount', render: (row) => <Amount value={row.amount} size="sm" /> },
                                 { key: 'date', header: 'Created', className: 'text-text-muted', render: (row) => formatDateTime(row.createdAt) },
-                                ...(canResettle ? [{
+                                ...(canResettle || canRefund ? [{
                                     key: 'action',
                                     header: <span className="sr-only">Actions</span>,
                                     className: 'text-right',
-                                    render: (row) => <ResettleButton payment={row} onClick={setTarget} />,
+                                    render: actionFor,
                                 }] : []),
                             ]}
                             mobileRow={(row) => ({
                                 title: personName(row.userId),
                                 subtitle: `${row.orderId} · ${formatRelativeTime(row.createdAt)}`,
-                                trailing: canResettle && !row.walletCredited
-                                    ? <ResettleButton payment={row} onClick={setTarget} />
-                                    : <Badge tone={isUncredited(row) ? 'negative' : PAYMENT_STATUS_TONE[row.status]} size="sm">{row.status}</Badge>,
+                                trailing: actionFor(row)
+                                    ?? <Badge tone={isUncredited(row) ? 'negative' : PAYMENT_STATUS_TONE[row.status]} size="sm">{row.status}</Badge>,
                             })}
                         />
                         <Pager page={payments.data.currentPage} totalPages={payments.data.totalPages} total={payments.data.total} onChange={setPage} />
@@ -160,8 +194,28 @@ const AdminPayments = () => {
             {canResettle && (
                 <p className="mt-3 text-xs leading-5 text-text-muted">
                     “Re-settle” checks an uncredited order with Razorpay. Credited orders have nothing to re-settle.
+                    {canRefund && ' “Refund” returns a credited top-up to its card, only while the wallet still holds it.'}
                 </p>
             )}
+
+            <ReauthSheet
+                open={Boolean(refundTarget)}
+                onClose={() => { setRefundTarget(null); setRefundReason(''); }}
+                onConfirm={refund}
+                loading={working}
+                variant="danger"
+                title="Refund this top-up to its card?"
+                description={refundTarget
+                    ? `₹${refundTarget.amount} is taken out of ${personName(refundTarget.userId)}'s wallet and refunded through Razorpay. If the wallet no longer holds it, nothing is refunded.`
+                    : ''}
+                confirmLabel="Refund"
+            >
+                <Field label="Reason" hint="At least 10 characters, e.g. the support ticket number. Goes to the audit log.">
+                    {(props) => (
+                        <Input {...props} maxLength={280} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} />
+                    )}
+                </Field>
+            </ReauthSheet>
 
             <ConfirmSheet
                 open={Boolean(target)}
@@ -179,15 +233,15 @@ const AdminPayments = () => {
     );
 };
 
-/** Only offered where there is something to settle — a credited order has no button, not a dead one. */
-const ResettleButton = ({ payment, onClick }) => (payment.walletCredited ? null : (
+/** Only offered where there is something to do — a row with no action has no button, not a dead one. */
+const RowAction = ({ label, onClick }) => (
     <button
         type="button"
-        onClick={() => onClick(payment)}
+        onClick={onClick}
         className="rounded-control px-2.5 py-1.5 text-xs font-medium text-accent-text hover:bg-accent-soft"
     >
-        Re-settle
+        {label}
     </button>
-));
+);
 
 export default AdminPayments;

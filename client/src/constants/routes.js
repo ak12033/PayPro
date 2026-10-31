@@ -37,6 +37,8 @@
  *
  *   /add-transaction -> removed from navigation. See ACTIVITY_MANUAL_ENTRY.
  */
+import { env } from '../app/config/env';
+
 export const ROUTES = {
     // ---- public
     /** Splash: plays the launch sequence, then routes to Home or Login. */
@@ -131,7 +133,20 @@ export const PUBLIC_ROUTES = [
  * Named rather than repeated as a literal, because "the home screen" moved in
  * this redesign and there were nine places that hard-coded `/dashboard`.
  */
-export const HOME_ROUTE = ROUTES.HOME;
+export const HOME_ROUTE = env.consumerWalletEnabled ? ROUTES.HOME : ROUTES.ACCOUNT;
+
+/**
+ * The consumer wallet's screens (DEC-02, CAP-LEG-1). With the wallet frozen
+ * they are not routed: each path redirects to HOME_ROUTE, so a bookmark or an
+ * old notification lands somewhere real instead of on a screen whose API is off.
+ */
+export const WALLET_ROUTES = [
+    ROUTES.HOME,
+    ROUTES.MONEY, ROUTES.SEND, ROUTES.ADD_MONEY, ROUTES.WITHDRAW, ROUTES.TRANSFER_2FA,
+    ROUTES.ACTIVITY, ROUTES.ACTIVITY_MANUAL_ENTRY,
+    ROUTES.INSIGHTS, ROUTES.BUDGETS, ROUTES.GOALS, ROUTES.BILLS, ROUTES.TOOLS, ROUTES.PORTFOLIO,
+    ROUTES.VERIFICATION,
+];
 
 /**
  * Paths that existed before the redesign, mapped to their replacement.

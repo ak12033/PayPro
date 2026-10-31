@@ -21,6 +21,7 @@ import { refreshSession } from '../services/auth/refreshSession';
 import { AUTH_EXPIRED_EVENT } from '../constants/app';
 import { PUBLIC_ROUTES, ROUTES } from '../constants/routes';
 import { RECENT_FETCH_LIMIT } from '../constants/transactions';
+import { env } from '../app/config/env';
 import { balanceMinorOf, fromMinor } from '../lib/money';
 
 const AuthContext = createContext(null);
@@ -101,8 +102,12 @@ export const AuthProvider = ({ children }) => {
          * user's entire history, and the whole array was held in context on
          * every page.
          */
-        const { data: recent } = await transactionApi.getRecent(RECENT_FETCH_LIMIT);
-        setRecentTransactions(recent.transactions ?? []);
+        // Not routed while the consumer wallet is frozen (DEC-02); a 404 here
+        // would fail the whole load and sign the user out.
+        if (env.consumerWalletEnabled) {
+            const { data: recent } = await transactionApi.getRecent(RECENT_FETCH_LIMIT);
+            setRecentTransactions(recent.transactions ?? []);
+        }
 
         return profile;
     }, []);

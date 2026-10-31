@@ -45,6 +45,7 @@ const CAPABILITY_ENDPOINT = {
     searchTransactions: 'GET /transactions',
     viewPayments: 'GET /payments',
     resettlePayments: 'POST /payments/:orderId/resettle',
+    refundPayments: 'POST /payments/:orderId/refund',
     replayWebhooks: 'POST /webhooks/:id/replay',
     adjustBalances: 'POST /adjustments',
     resetTwoFactor: 'POST /users/:userId/reset-2fa',
@@ -102,8 +103,8 @@ describe('separation of duties (plan.md §28.3 rule 3)', () => {
         expect(can('risk', 'adjustBalances')).toBe(false);
     });
 
-    it('only admin can move money from the console (adjust, re-settle, replay, repair, withdrawals)', () => {
-        for (const capability of ['adjustBalances', 'resettlePayments', 'replayWebhooks', 'repairBalances', 'processWithdrawals']) {
+    it('only admin can move money from the console (adjust, re-settle, refund, replay, repair, withdrawals)', () => {
+        for (const capability of ['adjustBalances', 'resettlePayments', 'refundPayments', 'replayWebhooks', 'repairBalances', 'processWithdrawals']) {
             expect(CAPABILITIES[capability]).toEqual(['admin']);
         }
     });

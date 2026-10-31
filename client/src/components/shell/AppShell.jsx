@@ -8,6 +8,7 @@ import AssistantLauncher from '../../features/ai/AssistantLauncher';
 import { PRIMARY_NAV } from '../../app/navigation';
 import { prefetchWhenIdle } from '../../app/routePrefetch';
 import { ROUTES } from '../../constants/routes';
+import { env } from '../../app/config/env';
 
 /**
  * The authenticated frame.
@@ -36,7 +37,7 @@ const AppShell = () => {
     // Once the first screen is up, fetch the other main destinations in idle
     // time so the first visit to each is as quick as a revisit.
     useEffect(
-        () => prefetchWhenIdle([...PRIMARY_NAV.map((item) => item.to), ROUTES.INSIGHTS]),
+        () => prefetchWhenIdle([...PRIMARY_NAV.map((item) => item.to), ...(env.consumerWalletEnabled ? [ROUTES.INSIGHTS] : [])]),
         []
     );
 

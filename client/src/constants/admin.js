@@ -34,6 +34,8 @@ export const CAPABILITIES = {
     searchTransactions: ['admin', 'support', 'risk'],
     viewPayments: ['admin', 'support', 'risk'],
     resettlePayments: ['admin'],
+    // DEF-01: refunds are a staff decision; the customer route is gone.
+    refundPayments: ['admin'],
     replayWebhooks: ['admin'],
     adjustBalances: ['admin'],
     // Phase 4 close-out, 2026-09-22.

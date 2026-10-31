@@ -8,6 +8,7 @@ import { prefetchProps } from '../../app/routePrefetch';
 import { useAuth } from '../../context/AuthContext';
 import { ROUTES } from '../../constants/routes';
 import { APP_NAME } from '../../constants/app';
+import { env } from '../../app/config/env';
 import Button from '../ui/Button';
 
 const STORAGE_KEY = 'paypro-sidebar-collapsed';
@@ -127,7 +128,7 @@ const Sidebar = () => {
             {/* The primary action lives in the navigation on desktop, where
                 there is room for it, so "add money" is reachable from every
                 screen without first navigating to the wallet. */}
-            <div className="shrink-0 px-3 pb-4">
+            {env.consumerWalletEnabled && <div className="shrink-0 px-3 pb-4">
                 {/* A button that navigates, not a <button> nested in an <a> —
                     which is invalid markup and gives assistive tech two
                     conflicting controls in the same place. */}
@@ -142,7 +143,7 @@ const Sidebar = () => {
                 >
                     <span className={cn(collapsed && 'sr-only')}>Add money</span>
                 </Button>
-            </div>
+            </div>}
 
             <nav aria-label="Primary" className="shrink-0 px-3">
                 <ul className="space-y-0.5">
@@ -162,13 +163,15 @@ const Sidebar = () => {
                 <GroupLabel collapsed={collapsed}>More</GroupLabel>
 
                 <ul className="space-y-0.5">
-                    <NavLink
-                        to={ROUTES.INSIGHTS}
-                        icon={LogoMark}
-                        label="Insights"
-                        active={pathname.startsWith(ROUTES.INSIGHTS)}
-                        collapsed={collapsed}
-                    />
+                    {env.consumerWalletEnabled && (
+                        <NavLink
+                            to={ROUTES.INSIGHTS}
+                            icon={LogoMark}
+                            label="Insights"
+                            active={pathname.startsWith(ROUTES.INSIGHTS)}
+                            collapsed={collapsed}
+                        />
+                    )}
                     <NavLink
                         to={ROUTES.SECURITY}
                         icon={ShieldCheck}

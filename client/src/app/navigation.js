@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { ROUTES } from '../constants/routes';
 import { can } from '../constants/admin';
+import { env } from './config/env';
 
 /**
  * The navigation model, defined once and consumed by both the desktop sidebar
@@ -16,25 +17,28 @@ import { can } from '../constants/admin';
  * a permanent `ml-64` offset that pushed it off the right edge. The app was, in
  * practice, unusable on the device most people bank on.
  */
-export const PRIMARY_NAV = [
+const ALL_PRIMARY_NAV = [
     {
         label: 'Home',
         to: ROUTES.HOME,
         icon: Home,
         /** Matches child routes too, so /home stays lit on any sub-page. */
         match: [ROUTES.HOME],
+        wallet: true,
     },
     {
         label: 'Money',
         to: ROUTES.MONEY,
         icon: ArrowLeftRight,
         match: [ROUTES.MONEY, ROUTES.SEND, ROUTES.ADD_MONEY, ROUTES.WITHDRAW],
+        wallet: true,
     },
     {
         label: 'Activity',
         to: ROUTES.ACTIVITY,
         icon: Receipt,
         match: [ROUTES.ACTIVITY, ROUTES.ACTIVITY_MANUAL_ENTRY],
+        wallet: true,
     },
     {
         label: 'Account',
@@ -44,6 +48,11 @@ export const PRIMARY_NAV = [
         match: [ROUTES.ACCOUNT, ROUTES.SECURITY, ROUTES.ADMIN],
     },
 ];
+
+/** With the consumer wallet frozen (DEC-02), its destinations are not offered. */
+export const primaryNavFor = (walletEnabled) => ALL_PRIMARY_NAV.filter((item) => walletEnabled || !item.wallet);
+
+export const PRIMARY_NAV = primaryNavFor(env.consumerWalletEnabled);
 
 /**
  * The operations console's sections (plan.md §28.4).

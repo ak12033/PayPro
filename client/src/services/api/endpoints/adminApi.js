@@ -56,6 +56,11 @@ export const adminApi = {
     listPayments: ({ status, stuck, orderId, userId, page } = {}) =>
         api.get('/admin/payments', { params: clean({ status, stuck: stuck ? 'true' : undefined, orderId, userId, page }) }),
     resettlePayment: (orderId) => api.post(`/admin/payments/${encodeURIComponent(orderId)}/resettle`),
+    /** Refund a top-up to its card (DEF-01). Keyed per confirmation, like `adjustBalance` below. */
+    refundPayment: (orderId, { reason, currentPassword, idempotencyKey = createIdempotencyKey() }) =>
+        api.post(`/admin/payments/${encodeURIComponent(orderId)}/refund`, { reason, currentPassword }, {
+            headers: { 'Idempotency-Key': idempotencyKey },
+        }),
 
     replayWebhook: (id) => api.post(`/admin/webhooks/${id}/replay`),
 

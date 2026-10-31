@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { configure, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AssistantProvider } from './AssistantContext';
@@ -24,6 +24,17 @@ vi.mock('../services/api/endpoints/aiApi', () => ({
 // Opening resolves a lazy import, then config, then history; under the full
 // parallel suite that has taken longer than the 1 s default.
 configure({ asyncUtilTimeout: 3000 });
+
+/**
+ * DEF-06: the slow step was the lazy sheet's *first* import, which transforms
+ * its whole module graph — under parallel load that alone could outlast the
+ * timeout above. Importing it once here, outside any test's clock, means every
+ * `lazy()` below resolves from the module cache. What the tests check (nothing
+ * mounts or fetches until opened) does not depend on the chunk being cold.
+ */
+beforeAll(async () => {
+    await import('../features/ai/AssistantSheet');
+}, 30000);
 
 const Opener = () => {
     const { openAssistant, available } = useAssistant();

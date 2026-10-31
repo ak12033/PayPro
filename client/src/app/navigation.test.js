@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { adminNavFor, isAdminNavItemActive, isNavItemActive, ADMIN_NAV, PRIMARY_NAV } from './navigation';
-import { ROUTES } from '../constants/routes';
+import { adminNavFor, isAdminNavItemActive, isNavItemActive, primaryNavFor, ADMIN_NAV, PRIMARY_NAV } from './navigation';
+import { ROUTES, WALLET_ROUTES } from '../constants/routes';
 
 const labels = (role) => adminNavFor(role).map((item) => item.label);
 
@@ -49,5 +49,24 @@ describe('active-state matching', () => {
 
     it('the primary tab bar is still exactly four destinations', () => {
         expect(PRIMARY_NAV).toHaveLength(4);
+    });
+});
+
+describe('consumer-wallet freeze (DEC-02, AC0-07)', () => {
+    it('offers only Account when the wallet is off', () => {
+        expect(primaryNavFor(false).map((item) => item.label)).toEqual(['Account']);
+    });
+
+    it('offers all four destinations when it is on', () => {
+        expect(primaryNavFor(true).map((item) => item.label)).toEqual(['Home', 'Money', 'Activity', 'Account']);
+    });
+
+    it('lists every wallet screen as a wallet route, and never Account, Security or Support', () => {
+        for (const path of [ROUTES.HOME, ROUTES.SEND, ROUTES.ADD_MONEY, ROUTES.WITHDRAW, ROUTES.ACTIVITY, ROUTES.INSIGHTS, ROUTES.BILLS, ROUTES.VERIFICATION]) {
+            expect(WALLET_ROUTES).toContain(path);
+        }
+        for (const path of [ROUTES.ACCOUNT, ROUTES.SECURITY, ROUTES.SUPPORT, ROUTES.ADMIN]) {
+            expect(WALLET_ROUTES).not.toContain(path);
+        }
     });
 });

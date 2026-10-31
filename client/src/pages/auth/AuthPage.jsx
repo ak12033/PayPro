@@ -30,9 +30,12 @@ const FORMS = {
  * the signup form (and "Login" swaps it back) — nothing else on the page or
  * in the URL changes. `/signup` redirects here with the dialog closed.
  *
- * The artwork is always shown whole, in a box with its own aspect ratio
+ * From `md` up the artwork is shown whole, in a box with its own aspect ratio
  * (1408 × 768) — never cropped: on wide monitors cropping cut off the panel's
- * logo row — with a blurred copy filling the leftover space. The wordmark and
+ * logo row — with a blurred copy filling the leftover space. Below `md` it
+ * fills the screen instead and is cropped at the sides around the centre:
+ * shown whole on a portrait phone it was a thin strip a couple of hundred
+ * pixels tall. The wordmark and
  * chip sit over the artwork, so their colours are fixed for a dark backdrop
  * rather than following the light/dark theme.
  */
@@ -62,7 +65,7 @@ const AuthPage = () => {
                 className="pointer-events-none absolute inset-0 h-full w-full scale-110 select-none object-cover opacity-50 blur-2xl"
             />
 
-            <div className="relative aspect-[1408/768] w-full md:absolute md:left-1/2 md:top-1/2 md:w-[min(100vw,calc(100dvh*1408/768))] md:-translate-x-1/2 md:-translate-y-1/2">
+            <div className="absolute max-md:inset-0 md:left-1/2 md:top-1/2 md:aspect-[1408/768] md:w-[min(100vw,calc(100dvh*1408/768))] md:-translate-x-1/2 md:-translate-y-1/2">
                 <img
                     src="/login.png"
                     alt=""
@@ -75,7 +78,7 @@ const AuthPage = () => {
                         maskComposite: 'intersect',
                         WebkitMaskComposite: 'source-in',
                     }}
-                    className="absolute inset-0 h-full w-full select-none"
+                    className="absolute inset-0 h-full w-full select-none object-cover object-center"
                 />
                 {/* The heading is part of the artwork; this gives it to screen readers. */}
                 <h1 className="sr-only">Welcome back, sign in to your control center</h1>

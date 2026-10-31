@@ -16,6 +16,14 @@ export const env = {
 
     razorpayKeyId: readEnv('VITE_RAZORPAY_KEY_ID'),
 
+    /**
+     * The consumer wallet is frozen (DEC-02, PH0.3 of the transformation plan):
+     * off in production builds unless switched on, on in development and tests.
+     * Must agree with the API's `CONSUMER_WALLET_ENABLED`, which is what
+     * actually refuses the routes; this only stops the UI offering them.
+     */
+    consumerWalletEnabled: readEnv('VITE_CONSUMER_WALLET_ENABLED', import.meta.env.PROD ? 'false' : 'true') === 'true',
+
     /** Error tracking (services/errorTracking.js). Empty = off. */
     sentryDsn: readEnv('VITE_SENTRY_DSN'),
     sentryEnvironment: readEnv('VITE_SENTRY_ENVIRONMENT'),
